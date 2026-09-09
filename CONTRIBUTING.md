@@ -43,6 +43,10 @@ cd LitScan
 # Install dependencies
 pip install -r requirements.txt
 
+# Run the tests (no network requests required)
+python test_edge.py
+python test_server_edge.py
+
 # Run the development server
 python litscan.py --serve
 ```

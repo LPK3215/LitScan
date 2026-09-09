@@ -1,0 +1,22 @@
+# Line endings
+* text=auto
+
+# Source files
+*.py text diff=python
+*.yaml text
+*.yml text
+*.toml text
+*.md text
+*.css text
+*.html text
+
+# Windows scripts
+*.bat text eol=crlf
+*.ps1 text eol=crlf
+
+# Binary
+*.png binary
+*.jpg binary
+*.gif binary
+*.ico binary
+*.pdf binary

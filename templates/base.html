@@ -4,13 +4,14 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% block title %}LitScan{% endblock %}</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🔭</text></svg>">
     <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
     <nav class="navbar">
         <div class="nav-brand">
-            <a href="/">LitScan</a>
-            <span class="nav-version">v0.1</span>
+            <a href="/"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>LitScan</a>
+            <span class="nav-version">v1.0.0</span>
         </div>
         <div class="nav-links">
             <a href="/" class="{% if active_page == 'search' %}active{% endif %}">检索</a>
@@ -25,7 +26,7 @@
     </main>
 
     <footer class="footer">
-        <span>LitScan - 学术文献检索工具</span>
+        <span>LitScan · 学术文献多库检索工具 · <a href="https://github.com/LPK3215/LitScan" target="_blank" rel="noopener">GitHub</a></span>
     </footer>
 
     {% block scripts %}{% endblock %}

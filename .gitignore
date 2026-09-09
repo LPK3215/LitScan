@@ -7,12 +7,25 @@ __pycache__/
 venv/
 env/
 ENV/
+.venv/
+
+# Packaging / build
+build/
+dist/
+*.egg-info/
+
+# Type/lint tool caches
+.mypy_cache/
+.ruff_cache/
 
 # IDE
 .vscode/
 .idea/
 *.swp
 *.swo
+
+# WorkBuddy local workspace data
+.workbuddy/
 
 # OS
 .DS_Store

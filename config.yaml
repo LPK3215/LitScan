@@ -22,6 +22,7 @@ query:
   keywords: "LLM agent evaluation benchmark"
   year_from: 2022
   limit_per_source: 30
+  sort_by: relevance   # relevance | citations | year
 
 # ── 输出 ──
 output:
@@ -29,6 +30,7 @@ output:
   save_raw: true
   save_csv: true
   save_log: true
+  dedup: true          # 跨库去重（DOI 主键 + 标题兜底）
 
 # ── 请求配置 ──
 request:

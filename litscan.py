@@ -6,7 +6,10 @@ LitScan · CLI 入口
   python litscan.py                          # 用默认 config.yaml 执行检索
   python litscan.py --config myconfig.yaml   # 指定配置文件
   python litscan.py --keywords "my topic"    # 命令行覆盖关键词
-  python litscan.py --history                # 查看搜索历史
+  python litscan.py -k "LLM agent" -y 2023 -l 20  # 限定年份与每库条数
+  python litscan.py --no-dedup                  # 关闭跨库去重
+  python litscan.py --sort-by citations         # 按引用数排序
+  python litscan.py --history                    # 查看搜索历史
   python litscan.py --history-search "LLM"   # 搜索历史记录
   python litscan.py --retry 20260909_123456  # 从历史记录重新检索
   python litscan.py --sources                # 列出可用检索源
@@ -41,6 +44,10 @@ def cmd_search(args, scanner: Scanner):
         scanner.config["request"]["proxy"] = args.proxy
     elif args.no_proxy:
         scanner.config["request"]["proxy"] = "none"
+    if args.no_dedup:
+        scanner.config["output"]["dedup"] = False
+    if args.sort_by:
+        scanner.config["query"]["sort_by"] = args.sort_by
 
     articles = scanner.run()
     return articles
@@ -133,6 +140,9 @@ def main():
     parser.add_argument("--year", "-y", type=int, help="起始年份")
     parser.add_argument("--proxy", help="代理地址 (如 http://127.0.0.1:7897)")
     parser.add_argument("--no-proxy", action="store_true", help="不走代理")
+    parser.add_argument("--no-dedup", action="store_true", help="关闭跨库去重")
+    parser.add_argument("--sort-by", choices=["relevance", "citations", "year"],
+                        help="排序方式（默认按配置 relevance）")
 
     # 历史 & 管理
     parser.add_argument("--history", action="store_true", help="查看搜索历史")

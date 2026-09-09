@@ -1,7 +1,12 @@
 # LitScan 学术文献多库检索工具
 
+![LitScan](./docs/assets/banner.svg)
+
 给关键词，自动从多个学术数据库拉取文章信息，输出标准化结果。
 
+**仓库地址**: <https://github.com/LPK3215/LitScan>
+
+[![Version](https://img.shields.io/badge/version-1.0.0-blue.svg)](CHANGELOG.md)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/python-3.9%2B-blue.svg)](https://www.python.org/)
 
@@ -20,6 +25,9 @@ python litscan.py --serve     # 启动服务，访问 http://127.0.0.1:8000
 python litscan.py --serve     # 打开浏览器访问 http://127.0.0.1:8000
 ```
 
+<!-- TODO: 截图待补充 -->
+<!-- TODO: 截图待补充 (history / sources / logs 页面) -->
+
 页面:
 - `/` — 检索页面（输入关键词、选数据源、看结果，支持 SSE 流式进度）
 - `/history` — 检索历史（查看/重跑/删除）
@@ -32,8 +40,13 @@ python litscan.py --serve     # 打开浏览器访问 http://127.0.0.1:8000
 python litscan.py                          # 用 config.yaml
 python litscan.py -k "my research topic"   # 命令行指定关键词
 python litscan.py -k "LLM agent" -y 2023 -l 20
+python litscan.py --sort-by citations      # 按引用数排序 (relevance/citations/year)
+python litscan.py --no-dedup               # 关闭跨库去重
 python litscan.py --history                # 查看搜索历史
+python litscan.py --history-search "LLM"   # 搜索历史记录
+python litscan.py --retry 20260909_123456  # 从历史记录重新检索
 python litscan.py --sources                # 列出检索源
+python litscan.py --serve -p 9000          # 指定端口启动服务
 ```
 
 ### 3. API 模式
@@ -47,14 +60,23 @@ API 接口:
 | 方法 | 路径 | 说明 |
 |------|------|------|
 | GET | /api/sources | 列出检索源 |
-| POST | /api/search | 多库检索 |
+| POST | /api/search | 多库检索（支持 dedup / sort_by） |
+| GET | /api/search/stream | SSE 流式检索（实时进度 + 限流/重试事件） |
 | POST | /api/search/{source} | 单库检索 |
 | GET | /api/articles | 最近一次结果 |
+| POST | /api/export | 多选导出 (markdown/bibtex/endnote/csv/text) |
+| GET | /api/article/detail | 文章详情回源（站内快速预览） |
+| GET | /api/stats | 运行统计 |
 | GET | /api/history | 搜索历史 |
+| GET | /api/history/stats | 历史统计 |
+| GET | /api/history/{id} | 单条历史详情 |
 | POST | /api/history/search | 搜索历史记录 |
 | POST | /api/history/retry/{id} | 从历史重新检索 |
 | DELETE | /api/history/{id} | 删除历史记录 |
 | DELETE | /api/history | 清空历史 |
+| GET | /api/logs | 操作日志 |
+| GET | /api/logs/stats | 日志统计 |
+| DELETE | /api/logs | 清空日志 |
 
 调用示例:
 
@@ -74,13 +96,88 @@ curl -X POST http://127.0.0.1:8000/api/search \
 | OpenReview | JSON | 顶会评审 |
 | OpenAIRE | JSON | 欧盟开放科学 |
 | DOAJ | JSON | 开放获取期刊 |
-| Europe PMC | JSON | 生物医学 |
+| Europe PMC | JSON | 生物医学（默认关闭） |
+
+## 结果处理
+
+### 跨库去重与排序
+
+同一篇论文常被多个库同时命中。LitScan 默认开启去重：
+
+- **DOI 主键匹配**：归一化 DOI 后比对（去前缀、小写、去尾部标点）
+- **标题 + 年份兜底**：无 DOI 时按归一化标题匹配，年份不同视为不同条目
+- 重复条目**合并到信息更全的那条**（补缺失字段、取更大引用数），并在 `sources` 字段记录所有命中来源
+
+排序支持 `relevance`（保留相关度原序）/ `citations`（引用数）/ `year`（年份）。
+
+```bash
+python litscan.py --no-dedup                 # CLI 关闭去重
+python litscan.py --sort-by citations        # CLI 按引用数排序
+```
+
+```bash
+# API
+curl -X POST http://127.0.0.1:8000/api/search \
+  -H "Content-Type: application/json" \
+  -d '{"keywords": "LLM agent", "sources": ["arxiv","crossref"], "dedup": true, "sort_by": "citations"}'
+```
+
+### 多选导出
+
+Web 端勾选结果后，底部操作栏可一键导出：
+
+| 格式 | 用途 |
+|---|---|
+| Markdown | 文献收藏（标题/作者/链接/摘要） |
+| BibTeX | LaTeX 引用，自动生成 citation key |
+| EndNote (RIS) | EndNote / Zotero / Mendeley 导入 |
+| CSV | Excel 打开 |
+| 纯文本 | 复制到笔记 |
+
+导出同时在 `out/exports/` 留档，路径在响应头 `X-Export-Path`。
+
+```bash
+curl -X POST http://127.0.0.1:8000/api/export \
+  -H "Content-Type: application/json" \
+  -d '{"format": "endnote", "articles": [{"title":"...","source":"arxiv","year":2024}], "keywords":"LLM"}'
+```
+
+### 站内快速预览
+
+点击结果卡「🔍 快速预览」回源拉取完整信息（全量摘要、全部作者、PDF 直链、分类等），不跳转即可查看。30 分钟缓存。
+
+```bash
+curl "http://127.0.0.1:8000/api/article/detail?source=arxiv&url=https://arxiv.org/abs/1706.03762"
+```
+
+支持回源：arxiv / crossref / semanticscholar / openreview / europepmc / doaj；openaire 无单条接口，返回 501 并降级为原文链接。
+
+## 架构
+
+![LitScan 架构图](./docs/assets/architecture.svg)
+
+- **接入层**: CLI / Web UI / REST API + SSE 三种入口，共用同一套核心
+- **核心层**: Scanner 调度 → Fetcher（重试 ×4、限流退避、代理）→ 7 个数据源适配器 → 去重排序
+- **输出层**: 统一 CSV、检索日志、搜索历史、各库原始响应
+- 生成脚本: [`docs/scripts/generate_architecture.py`](docs/scripts/generate_architecture.py)（改动后可重新生成）
+
+## 技术栈
+
+| 层 | 技术 | 用途 |
+|---|---|---|
+| 后端 | FastAPI + Uvicorn | API 服务 + SSE 流式推送 |
+| 数据校验 | Pydantic ≥2.0 | 请求/响应模型 |
+| 模板 | Jinja2 ≥3.1 | Web 页面渲染 |
+| HTTP | requests ≥2.31 | 各库数据抓取 |
+| 配置 | PyYAML ≥6.0 | config.yaml 解析 |
+| 测试 | FastAPI TestClient (httpx) | 边界测试 |
 
 ## 输出
 
 ```
 out/
 ├── raw/              # 各库原始响应
+├── exports/          # 多选导出留档 (md/bib/ris/csv/txt)
 ├── articles.csv      # 统一格式文章列表
 ├── log.md            # 检索日志
 └── history.json      # 搜索历史
@@ -117,7 +214,11 @@ LitScan/
 │   ├── fetcher.py       # HTTP + 重试 + 限流处理
 │   ├── adapters.py      # 各库适配器
 │   ├── scanner.py       # 调度器
+│   ├── dedup.py         # 跨库去重 (DOI + 标题) 与排序
+│   ├── exporter.py      # Markdown/BibTeX/EndNote/CSV/文本 导出
+│   ├── article_detail.py # 文章详情回源（站内预览）
 │   ├── history.py       # 搜索历史
+│   ├── logger.py        # 操作日志
 │   └── output.py        # CSV/日志输出
 ├── server/
 │   └── main.py          # FastAPI 后端 + 模板路由
@@ -125,13 +226,48 @@ LitScan/
 │   ├── base.html
 │   ├── index.html
 │   ├── history.html
-│   └── sources.html
-└── static/
-    └── style.css        # 样式
+│   ├── sources.html
+│   └── logs.html
+├── static/
+│   └── style.css        # 样式
+├── docs/
+│   ├── assets/          # README 可视化资产 (SVG)
+│   │   ├── banner.svg
+│   │   └── architecture.svg
+│   └── scripts/         # SVG 生成脚本 (可复用)
+│       ├── generate_banner.py
+│       └── generate_architecture.py
+├── test_edge.py         # 核心模块边界测试
+└── test_server_edge.py  # 服务端边界测试
+```
+
+## 测试
+
+```bash
+python test_edge.py          # 核心模块（不发网络请求）
+python test_server_edge.py   # 服务端接口（仅验证逻辑）
 ```
 
 ## 后续可加
 
-- 跨库去重 (DOI主键匹配)
-- 检索结果引用数排序
-- 导出 BibTeX / EndNote
+- 检索结果引用数排序 ✅（v1.1 已加）
+- 跨库去重 (DOI主键匹配) ✅（v1.1 已加）
+- 导出 BibTeX / EndNote ✅（v1.1 已加）
+- 全文 PDF 批量抓取
+- 相似文献推荐
+
+## 更新日志
+
+见 [CHANGELOG.md](CHANGELOG.md)。
+
+## FAQ
+
+见 [FAQ.md](FAQ.md)。
+
+## 贡献
+
+见 [CONTRIBUTING.md](CONTRIBUTING.md)。
+
+## License
+
+[MIT](LICENSE) © 2026 LPK3215

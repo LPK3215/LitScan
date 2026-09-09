@@ -163,6 +163,104 @@ test("空文章总数为 0", r.json()["total"] == 0)
 
 
 # ─────────────────────────────────────────────────────────────
+section("7. 导出 API /api/export (无网络)")
+# ─────────────────────────────────────────────────────────────
+
+ARTICLES = [
+    {"title": "Attention Is All You Need", "source": "arxiv", "year": 2017,
+     "venue": "NeurIPS", "doi": "10.5555/3295222", "url": "https://arxiv.org/abs/1706.03762",
+     "citation_count": 90000, "authors": "Ashish Vaswani", "abstract": "abstract text"},
+]
+
+# 7.1 markdown 导出
+r = client.post("/api/export", json={"format": "markdown", "articles": ARTICLES, "keywords": "transformer"})
+test("markdown 导出 200", r.status_code == 200)
+test("markdown Content-Type", "text/markdown" in r.headers["content-type"])
+test("markdown 内容含标题", "Attention Is All You Need" in r.text)
+test("markdown 附件头", "attachment" in r.headers.get("content-disposition", ""))
+
+# 7.2 各格式
+for fmt, needle in [("bibtex", "@article{"), ("endnote", "TY  - JOUR"),
+                    ("csv", "title,source,sources,year"), ("text", "- Attention")]:
+    r = client.post("/api/export", json={"format": fmt, "articles": ARTICLES, "save": False})
+    test(f"{fmt} 导出 200 且内容正确", r.status_code == 200 and needle in r.text)
+
+# 7.3 非法格式
+r = client.post("/api/export", json={"format": "xml", "articles": ARTICLES})
+test("非法格式返回 422", r.status_code == 422)
+
+# 7.4 空文章列表
+r = client.post("/api/export", json={"format": "markdown", "articles": []})
+test("空列表返回 422", r.status_code == 422)
+
+# 7.5 留档
+r = client.post("/api/export", json={"format": "markdown", "articles": ARTICLES, "save": True})
+export_path = r.headers.get("x-export-path", "")
+test("留档路径写入响应头", "exports" in export_path and os.path.exists(export_path))
+if export_path and os.path.exists(export_path):
+    with open(export_path, "r", encoding="utf-8") as f:
+        test("留档内容与响应一致", "Attention Is All You Need" in f.read())
+    # out/ 已被 .gitignore 忽略，留档文件无需删除
+
+# ─────────────────────────────────────────────────────────────
+section("8. 详情 API /api/article/detail (参数校验，无网络)")
+# ─────────────────────────────────────────────────────────────
+
+r = client.get("/api/article/detail", params={"source": "nonexistent", "url": "https://x.com"})
+test("未知源返回 400", r.status_code == 400)
+
+r = client.get("/api/article/detail", params={"source": "arxiv"})
+test("缺 url 和 doi 返回 400", r.status_code == 400)
+
+r = client.get("/api/article/detail", params={"source": "openaire", "url": "https://x.com"})
+test("不支持回源的源返回 501", r.status_code == 501)
+
+# arxiv 传入无法解析的链接 → DetailNotFound → 404 (不发请求，解析即失败)
+r = client.get("/api/article/detail", params={"source": "arxiv", "url": "https://example.com/no-id"})
+test("无法解析 arXiv ID 返回 404", r.status_code == 404)
+
+# crossref 缺 DOI → 404
+r = client.get("/api/article/detail", params={"source": "crossref", "url": "https://example.com"})
+test("crossref 缺 DOI 返回 404", r.status_code == 404)
+
+# semanticscholar 缺 DOI/paperId → 404
+r = client.get("/api/article/detail", params={"source": "semanticscholar", "url": "https://example.com"})
+test("s2 缺标识符返回 404", r.status_code == 404)
+
+# openreview 链接无 id 参数 → 404
+r = client.get("/api/article/detail", params={"source": "openreview", "url": "https://openreview.net/forum"})
+test("openreview 缺 id 返回 404", r.status_code == 404)
+
+
+# ─────────────────────────────────────────────────────────────
+section("9. 去重/排序参数 (参数校验，无网络)")
+# ─────────────────────────────────────────────────────────────
+
+# 9.1 dedup / sort_by 参数被接受（sources 无效会先于网络失败）
+r = client.post("/api/search", json={
+    "keywords": "test", "sources": ["arxiv"],
+    "dedup": False, "sort_by": "citations"})
+test("dedup/sort_by 参数接受", r.status_code in (200, 503))
+
+# 9.2 非法排序值 → 422
+r = client.post("/api/search", json={
+    "keywords": "test", "sources": ["arxiv"], "sort_by": "nonsense"})
+test("非法 sort_by 返回 422", r.status_code == 422)
+
+# 9.3 去重逻辑直测（不发网络）
+from core.dedup import deduplicate
+from core.adapters import Article
+arts = [
+    Article(title="Same Paper", source="arxiv", doi="10.1000/abc"),
+    Article(title="Same Paper", source="crossref", doi="https://doi.org/10.1000/ABC",
+            abstract="longer", citation_count=7),
+    Article(title="Unique", source="doaj"),
+]
+kept, st = deduplicate(arts)
+test("服务端可用去重函数", len(kept) == 2 and st["removed"] == 1)
+test("合并后带 sources", "; " in (kept[0].sources or ""))
+
+# ─────────────────────────────────────────────────────────────
 print(f"\n{'='*60}")
 print(f"  测试结果汇总")
 print(f"{'='*60}")

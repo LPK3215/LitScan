@@ -26,6 +26,7 @@ class Article:
     citation_count: Optional[int] = None
     abstract: Optional[str] = None
     authors: Optional[str] = None
+    sources: Optional[str] = None  # 去重后：所有命中该文献的源（"; " 分隔）
 
     def to_dict(self) -> dict:
         return asdict(self)

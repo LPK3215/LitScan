@@ -39,9 +39,9 @@ def save_csv(articles: list[Article], output_dir: str, filename: str = "articles
     ensure_dir(output_dir)
     filepath = os.path.join(output_dir, filename)
 
-    fieldnames = ["title", "source", "year", "venue", "doi", "url", "citation_count", "authors", "abstract"]
+    fieldnames = ["title", "source", "sources", "year", "venue", "doi", "url", "citation_count", "authors", "abstract"]
     with open(filepath, "w", newline="", encoding="utf-8-sig") as f:
-        writer = csv.DictWriter(f, fieldnames=fieldnames)
+        writer = csv.DictWriter(f, fieldnames=fieldnames, extrasaction="ignore")
         writer.writeheader()
         for a in articles:
             writer.writerow(a.to_dict())

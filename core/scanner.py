@@ -12,6 +12,7 @@ from .adapters import ADAPTERS, Article
 from .output import save_csv, append_log
 from .history import SearchHistory, SearchRecord
 from .fetcher import RateLimitInfo, FetchError
+from .dedup import deduplicate, sort_articles
 
 logger = logging.getLogger("litscan.scanner")
 
@@ -115,8 +116,17 @@ class Scanner:
                 print(f" ERR: {str(e)[:60]}")
                 logger.error(f"{name} 检索异常: {e}")
 
+        # ── 跨库去重 + 排序 ──
+        dedup_stats = {"original": len(self.articles), "removed": 0, "by_doi": 0, "by_title": 0}
+        if output_cfg.get("dedup", True):
+            self.articles, dedup_stats = deduplicate(self.articles)
+        sort_by = query_cfg.get("sort_by", "relevance")
+        if sort_by != "relevance":
+            self.articles = sort_articles(self.articles, by=sort_by, desc=True)
+
         print(f"\n{'='*50}")
-        print(f"  检索完成: 共 {len(self.articles)} 篇")
+        print(f"  检索完成: 共 {len(self.articles)} 篇"
+              + (f"（去重合并 {dedup_stats['removed']} 条重复）" if dedup_stats["removed"] else ""))
         print(f"{'='*50}")
         for src, count in self.results_per_source.items():
             status = "OK" if count > 0 else "FAIL"

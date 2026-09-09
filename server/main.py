@@ -10,9 +10,11 @@ LitScan FastAPI 后端
 API 接口 (前缀 /api/):
   GET  /api/sources             列出可用检索源
   POST /api/search              多库检索
-  GET  /api/search/stream       SSE 实时检索进度
+  GET  /api/search/stream       SSE 实时检索进度 (含限流/重试事件)
   POST /api/search/{source}     单库检索
   GET  /api/articles            最近一次检索结果
+  POST /api/export              多选导出 (markdown/bibtex/csv/text)
+  GET  /api/article/detail      文章详情回源 (站内快速预览)
   GET  /api/history             搜索历史
   GET  /api/history/{record_id} 历史记录详情
   POST /api/history/search      搜索历史记录
@@ -27,13 +29,16 @@ API 接口 (前缀 /api/):
 import logging
 import json
 import asyncio
+import queue
 from typing import Optional, AsyncGenerator
+from urllib.parse import quote
 
 from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import StreamingResponse
+from fastapi.responses import StreamingResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel, Field
+from typing import Literal
 
 import sys, os
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -42,6 +47,9 @@ from core.adapters import ADAPTERS, Article
 from core.history import SearchHistory, SearchRecord
 from core.fetcher import FetchError, RateLimitInfo
 from core.logger import OperationLogger, LogLevel
+from core.exporter import build_export, save_export, FORMAT_META
+from core.dedup import deduplicate, sort_articles
+from core.article_detail import get_detail, DetailNotSupported, DetailNotFound
 
 logger = logging.getLogger("litscan.server")
 
@@ -50,7 +58,7 @@ BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 app = FastAPI(
     title="LitScan",
     description="学术文献多库检索工具",
-    version="0.1.0",
+    version="1.0.0",
 )
 
 # 静态文件 + 模板
@@ -79,12 +87,15 @@ class SearchRequest(BaseModel):
     limit_per_source: int = Field(30, ge=1, le=100)
     year_from: Optional[int] = Field(None, ge=1900, le=2030)
     proxy: Optional[str] = Field(None, description="代理地址")
+    dedup: bool = Field(True, description="跨库去重（DOI 主键 + 标题兜底）")
+    sort_by: Literal["relevance", "citations", "year"] = Field("relevance", description="排序方式")
 
 
 class SearchResponse(BaseModel):
     total: int
     per_source: dict[str, int]
     articles: list[dict]
+    dedup: dict[str, int] = {}
 
 
 class ErrorResponse(BaseModel):
@@ -93,13 +104,20 @@ class ErrorResponse(BaseModel):
     retries: int = 0
 
 
+class ExportRequest(BaseModel):
+    """多选导出请求"""
+    format: Literal["markdown", "bibtex", "endnote", "csv", "text"]
+    articles: list[dict] = Field(..., min_length=1, description="选中的文章列表")
+    keywords: str = Field("", description="关联关键词（写入文件名与文档头）")
+    save: bool = Field(True, description="是否在 out/exports/ 留档")
+
+
 # ── 前端页面 ──
 
 @app.get("/")
 async def index(request: Request):
     """首页 - 检索页面"""
-    return templates.TemplateResponse("index.html", {
-        "request": request,
+    return templates.TemplateResponse(request, "index.html", {
         "active_page": "search",
     })
 
@@ -107,27 +125,24 @@ async def index(request: Request):
 @app.get("/history")
 async def history_page(request: Request):
     """历史记录页面"""
-    return templates.TemplateResponse("history.html", {
-        "request": request,
-        "active_page": "history",
+    return templates.TemplateResponse(request, "history.html", {
+                "active_page": "history",
     })
 
 
 @app.get("/sources")
 async def sources_page(request: Request):
     """数据源页面"""
-    return templates.TemplateResponse("sources.html", {
-        "request": request,
-        "active_page": "sources",
+    return templates.TemplateResponse(request, "sources.html", {
+                "active_page": "sources",
     })
 
 
 @app.get("/logs")
 async def logs_page(request: Request):
     """操作日志页面"""
-    return templates.TemplateResponse("logs.html", {
-        "request": request,
-        "active_page": "logs",
+    return templates.TemplateResponse(request, "logs.html", {
+                "active_page": "logs",
     })
 
 
@@ -156,11 +171,12 @@ async def list_sources():
 # ── SSE 实时检索进度 ──
 
 async def search_with_progress(keywords: str, sources: list[str], limit: int,
-                               year_from: Optional[int], proxy: Optional[str] = None) -> AsyncGenerator[str, None]:
+                               year_from: Optional[int], proxy: Optional[str] = None,
+                               dedup: bool = True, sort_by: str = "relevance") -> AsyncGenerator[str, None]:
     """
     执行检索并通过 SSE 推送实时进度
     """
-    all_articles: list[dict] = []
+    all_articles: list[Article] = []
     per_source: dict[str, int] = {}
     errors: dict[str, str] = {}
 
@@ -181,16 +197,58 @@ async def search_with_progress(keywords: str, sources: list[str], limit: int,
         op_logger.progress(progress_msg, source="search", details={"source": src_name, "current": idx, "total": total_sources})
 
         try:
-            articles = scanner.search_single(
-                source_name=src_name,
-                keywords=keywords,
-                limit=limit,
-                year_from=year_from,
-                proxy=proxy,
-            )
+            # 检索放入线程池执行，主协程轮询事件队列，
+            # 把 429 限流等待 / 重试事件实时推给前端（搜索过程可见性）
+            events: "queue.Queue[dict]" = queue.Queue()
+            loop = asyncio.get_running_loop()
+
+            def _on_rate_limit(info: RateLimitInfo):
+                events.put({
+                    "type": "rate_limit", "source": src_name,
+                    "wait_seconds": info.wait_seconds,
+                    "attempt": info.attempt, "max_attempts": info.max_attempts,
+                    "message": f"{src_name}: 限流，等待 {info.wait_seconds}s (第{info.attempt}/{info.max_attempts}次)",
+                })
+
+            def _on_retry(attempt: int, max_attempts: int, reason: str):
+                events.put({
+                    "type": "retry", "source": src_name,
+                    "message": f"{src_name}: 第{attempt}/{max_attempts}次重试 ({reason})",
+                })
+
+            def _run():
+                return scanner.search_single(
+                    source_name=src_name,
+                    keywords=keywords,
+                    limit=limit,
+                    year_from=year_from,
+                    proxy=proxy,
+                    on_rate_limit=_on_rate_limit,
+                    on_retry=_on_retry,
+                )
+
+            fut = loop.run_in_executor(None, _run)
+            while not fut.done():
+                try:
+                    while True:
+                        ev = events.get_nowait()
+                        yield f"data: {json.dumps(ev, ensure_ascii=False)}\n\n"
+                        op_logger.progress(ev["message"], source="search", details={"source": src_name})
+                except queue.Empty:
+                    pass
+                await asyncio.sleep(0.3)
+            # 收尾：排空剩余事件
+            while True:
+                try:
+                    ev = events.get_nowait()
+                    yield f"data: {json.dumps(ev, ensure_ascii=False)}\n\n"
+                    op_logger.progress(ev["message"], source="search", details={"source": src_name})
+                except queue.Empty:
+                    break
+            articles = fut.result()
             per_source[src_name] = len(articles)
             for a in articles:
-                all_articles.append(a.to_dict())
+                all_articles.append(a)
 
             # 成功
             success_msg = f"{src_name}: 找到 {len(articles)} 篇"
@@ -228,15 +286,29 @@ async def search_with_progress(keywords: str, sources: list[str], limit: int,
         except Exception as e:
             logger.error(f"保存历史失败: {e}")
 
+    # ── 去重 + 排序 ──
+    dedup_stats = {"original": len(all_articles), "removed": 0, "by_doi": 0, "by_title": 0}
+    if dedup:
+        all_articles, dedup_stats = deduplicate(all_articles)
+    if sort_by != "relevance":
+        all_articles = sort_articles(all_articles, by=sort_by, desc=True)
+
+    # 最近结果供 /api/articles 复用
+    global _last_results
+    _last_results = [a.to_dict() for a in all_articles]
+
     # 完成
     complete_msg = f"检索完成: 共 {len(all_articles)} 篇"
-    yield f"data: {json.dumps({'type': 'complete', 'total': len(all_articles), 'per_source': per_source, 'errors': errors, 'articles': all_articles, 'message': complete_msg}, ensure_ascii=False)}\n\n"
-    op_logger.success(complete_msg, source="search", details={"total": len(all_articles), "per_source": per_source})
+    if dedup_stats["removed"]:
+        complete_msg += f"（去重合并 {dedup_stats['removed']} 条重复）"
+    yield f"data: {json.dumps({'type': 'complete', 'total': len(all_articles), 'per_source': per_source, 'errors': errors, 'dedup': dedup_stats, 'articles': _last_results, 'message': complete_msg}, ensure_ascii=False)}\n\n"
+    op_logger.success(complete_msg, source="search", details={"total": len(all_articles), "per_source": per_source, "dedup": dedup_stats})
 
 
 @app.get("/api/search/stream")
 async def search_stream(keywords: str, sources: str = None, limit_per_source: int = 30,
-                        year_from: Optional[int] = None, proxy: Optional[str] = None):
+                        year_from: Optional[int] = None, proxy: Optional[str] = None,
+                        dedup: bool = True, sort_by: str = "relevance"):
     """
     SSE 实时检索进度
     sources: 逗号分隔的源名称，如 "arxiv,semanticscholar,crossref"
@@ -256,7 +328,8 @@ async def search_stream(keywords: str, sources: str = None, limit_per_source: in
         raise HTTPException(status_code=400, detail="没有有效的检索源")
 
     return StreamingResponse(
-        search_with_progress(keywords, valid_sources, limit_per_source, year_from, proxy),
+        search_with_progress(keywords, valid_sources, limit_per_source, year_from, proxy,
+                             dedup, sort_by),
         media_type="text/event-stream",
         headers={
             "Cache-Control": "no-cache",
@@ -276,7 +349,7 @@ async def search(request: SearchRequest):
 
     sources_to_use = request.sources
     per_source: dict[str, int] = {}
-    all_articles: list[dict] = []
+    all_articles: list[Article] = []
     errors: dict[str, str] = {}
 
     op_logger.info(f"开始检索: {request.keywords}", source="api", details={"keywords": request.keywords, "sources": sources_to_use})
@@ -295,9 +368,7 @@ async def search(request: SearchRequest):
             )
             per_source[src_name] = len(articles)
             for a in articles:
-                d = a.to_dict()
-                all_articles.append(d)
-                _last_results.append(d)
+                all_articles.append(a)
             op_logger.success(f"{src_name}: {len(articles)} 篇", source="api", details={"source": src_name, "count": len(articles)})
         except FetchError as e:
             per_source[src_name] = 0
@@ -307,6 +378,14 @@ async def search(request: SearchRequest):
             per_source[src_name] = 0
             errors[src_name] = str(e)[:200]
             op_logger.error(f"{src_name}: {str(e)[:100]}", source="api", details={"source": src_name, "error": str(e)[:200]})
+
+    # ── 去重 + 排序 ──
+    dedup_stats = {"original": len(all_articles), "removed": 0, "by_doi": 0, "by_title": 0}
+    if request.dedup:
+        all_articles, dedup_stats = deduplicate(all_articles)
+    if request.sort_by != "relevance":
+        all_articles = sort_articles(all_articles, by=request.sort_by, desc=True)
+    _last_results = [a.to_dict() for a in all_articles]
 
     # 保存历史
     if scanner.history:
@@ -322,12 +401,14 @@ async def search(request: SearchRequest):
         except Exception as e:
             logger.error(f"保存历史失败: {e}")
 
-    op_logger.success(f"检索完成: 共 {len(all_articles)} 篇", source="api", details={"total": len(all_articles)})
+    op_logger.success(f"检索完成: 共 {len(all_articles)} 篇", source="api",
+                      details={"total": len(all_articles), "dedup": dedup_stats})
 
     response = SearchResponse(
         total=len(all_articles),
         per_source=per_source,
-        articles=all_articles,
+        articles=_last_results,
+        dedup=dedup_stats,
     )
 
     # 有错误时附加到响应
@@ -387,6 +468,74 @@ async def search_single_source(source: str, request: SearchRequest):
 async def get_last_articles():
     """获取最近一次检索结果"""
     return {"total": len(_last_results), "articles": _last_results}
+
+
+# ── 多选导出 ──
+
+@app.post("/api/export")
+async def export_articles(request: ExportRequest):
+    """
+    多选导出：markdown(链接收藏) / bibtex / csv / text(复制用纯文本)
+    save=true 时同时在 out/exports/ 留档，路径放响应头 X-Export-Path
+    """
+    fmt = request.format
+    try:
+        content = build_export(fmt, request.articles, request.keywords)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    meta = FORMAT_META[fmt]
+    op_logger.info(
+        f"导出 {len(request.articles)} 篇 ({fmt})",
+        source="export",
+        details={"format": fmt, "count": len(request.articles), "keywords": request.keywords},
+    )
+
+    export_path = None
+    if request.save:
+        try:
+            export_dir = os.path.join(BASE_DIR, "out", "exports")
+            export_path = save_export(content, fmt, export_dir, request.keywords)
+        except OSError as e:
+            logger.error(f"导出留档失败: {e}")
+
+    headers = {}
+    if export_path:
+        headers["X-Export-Path"] = export_path
+
+    safe_kw = "".join(c for c in request.keywords if c.isalnum() or c in "-_ ")[:30].strip().replace(" ", "_")
+    filename = f"litscan_{fmt}{('_' + safe_kw) if safe_kw else ''}.{meta['ext']}"
+    ascii_name = filename.encode("ascii", "ignore").decode() or f"litscan_{fmt}.{meta['ext']}"
+    headers["Content-Disposition"] = f"attachment; filename=\"{ascii_name}\"; filename*=UTF-8''{quote(filename)}"
+
+    return Response(content=content, media_type=meta["mime"], headers=headers)
+
+
+# ── 文章详情（站内快速预览） ──
+
+@app.get("/api/article/detail")
+async def article_detail(source: str, url: str = None, doi: str = None):
+    """
+    回源拉取文章完整信息（全量摘要、作者、分类、PDF 链接等），带 30 分钟缓存
+    支持: arxiv / crossref / semanticscholar / openreview / europepmc / doaj
+    """
+    if source not in ADAPTERS:
+        raise HTTPException(status_code=400, detail=f"未知检索源: {source}")
+    if not url and not doi:
+        raise HTTPException(status_code=400, detail="需要 url 或 doi 参数")
+
+    try:
+        data = get_detail(source, url=url, doi=doi)
+        op_logger.info(f"详情预览: {source}", source="detail", details={"source": source, "url": url, "doi": doi})
+        return data
+    except DetailNotSupported as e:
+        raise HTTPException(status_code=501, detail=str(e))
+    except DetailNotFound as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except FetchError as e:
+        raise HTTPException(status_code=503, detail=f"回源失败: {str(e)} (已重试 {e.retries_done} 次)")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"详情获取异常: {str(e)[:200]}")
 
 
 @app.get("/api/stats")

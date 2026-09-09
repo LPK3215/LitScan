@@ -20,6 +20,16 @@
             <label>每库
                 <input type="number" id="limit" name="limit" value="20" min="1" max="100" class="input-limit">
             </label>
+            <label>排序
+                <select id="sortBy" name="sort_by" class="input-select">
+                    <option value="relevance">相关度</option>
+                    <option value="citations">引用数</option>
+                    <option value="year">年份</option>
+                </select>
+            </label>
+            <label class="checkbox-label" title="同一篇被多个库命中时合并为一条">
+                <input type="checkbox" id="dedup" checked> 跨库去重
+            </label>
             <span class="separator">|</span>
             <span class="sources-label">数据源:</span>
             <div class="sources-checkboxes" id="sourcesCheckboxes">
@@ -43,11 +53,44 @@
     <!-- 结果列表 -->
     <div id="resultsArea" class="results-area"></div>
 </div>
+
+<!-- 多选操作栏 -->
+<div id="actionBar" class="action-bar hidden">
+    <label class="action-select-all">
+        <input type="checkbox" id="selectAll"> 全选
+    </label>
+    <span class="action-count" id="actionCount">已选 0 篇</span>
+    <span class="action-sep"></span>
+    <button class="btn btn-small" data-export="markdown" title="保存为 Markdown 文献收藏">📥 Markdown</button>
+    <button class="btn btn-small" data-export="bibtex" title="保存为 BibTeX">📚 BibTeX</button>
+    <button class="btn btn-small" data-export="endnote" title="保存为 EndNote/Zotero 用的 RIS">📝 EndNote</button>
+    <button class="btn btn-small" data-export="csv" title="保存为 CSV">📊 CSV</button>
+    <button class="btn btn-small" data-export="text" title="复制纯文本到剪贴板">📋 复制</button>
+</div>
+
+<!-- 详情预览弹窗 -->
+<div id="previewModal" class="modal-overlay hidden">
+    <div class="modal-card" role="dialog" aria-modal="true">
+        <div class="modal-header">
+            <span class="modal-title">文献详情</span>
+            <button class="modal-close" id="previewClose" aria-label="关闭">&times;</button>
+        </div>
+        <div class="modal-body" id="previewBody">
+            <p class="loading">加载中...</p>
+        </div>
+    </div>
+</div>
+
+<!-- 轻提示 -->
+<div id="toast" class="toast hidden"></div>
 {% endblock %}
 
 {% block scripts %}
 <script>
-// 页面加载时获取数据源列表
+// ── 全局状态 ──
+let currentArticles = [];   // 最近一次检索结果
+const selectedIdx = new Set();
+
 document.addEventListener('DOMContentLoaded', loadSources);
 
 async function loadSources() {
@@ -77,6 +120,8 @@ async function doSearch() {
     const keywords = document.getElementById('keywords').value.trim();
     const yearFrom = document.getElementById('yearFrom').value;
     const limit = document.getElementById('limit').value;
+    const sortBy = document.getElementById('sortBy').value;
+    const dedup = document.getElementById('dedup').checked;
     const selectedSources = Array.from(document.querySelectorAll('input[name="sources"]:checked'))
                                  .map(cb => cb.value);
 
@@ -95,6 +140,9 @@ async function doSearch() {
     progressStatus.textContent = '准备中...';
     resultsArea.innerHTML = '';
     resultStats.classList.add('hidden');
+    document.getElementById('actionBar').classList.add('hidden');
+    currentArticles = [];
+    selectedIdx.clear();
     searchBtn.disabled = true;
     searchBtn.textContent = '检索中...';
 
@@ -102,7 +150,7 @@ async function doSearch() {
 
     try {
         // 使用 EventSource 进行 SSE 实时检索
-        const url = `/api/search/stream?keywords=${encodeURIComponent(keywords)}&sources=${encodeURIComponent(sourcesParam)}&limit_per_source=${limit}${yearFrom ? '&year_from=' + yearFrom : ''}`;
+        const url = `/api/search/stream?keywords=${encodeURIComponent(keywords)}&sources=${encodeURIComponent(sourcesParam)}&limit_per_source=${limit}${yearFrom ? '&year_from=' + yearFrom : ''}&dedup=${dedup}&sort_by=${sortBy}`;
 
         const eventSource = new EventSource(url);
 
@@ -144,6 +192,14 @@ function handleProgress(data, progressLog, progressStatus) {
     else if (type === 'skip') {
         progressLog.innerHTML += `<div class="log-entry log-warning">⊘ ${data.message}</div>`;
     }
+    else if (type === 'rate_limit') {
+        progressStatus.textContent = data.message;
+        progressLog.innerHTML += `<div class="log-entry log-warning">⏳ ${data.message}</div>`;
+    }
+    else if (type === 'retry') {
+        progressStatus.textContent = data.message;
+        progressLog.innerHTML += `<div class="log-entry log-warning">↻ ${data.message}</div>`;
+    }
     else if (type === 'complete') {
         progressStatus.textContent = data.message;
         progressLog.innerHTML += `<div class="log-entry log-info" style="font-weight:bold;margin-top:8px;">${data.message}</div>`;
@@ -179,22 +235,43 @@ function displayResults(data) {
     }
     resultStats.innerHTML = statsHtml;
 
+    // 去重统计
+    if (data.dedup && data.dedup.removed > 0) {
+        const dd = data.dedup;
+        resultStats.innerHTML += `<span class="stat-dedup" title="DOI 匹配 ${dd.by_doi} 条 · 标题匹配 ${dd.by_title} 条">🧹 合并重复 ${dd.removed} 条</span>`;
+    }
+
+    currentArticles = data.articles || [];
+    selectedIdx.clear();
+    updateActionBar();
+
     // 结果列表
-    if (data.articles && data.articles.length > 0) {
+    if (currentArticles.length > 0) {
         let html = '<div class="articles-list">';
-        data.articles.forEach(a => {
-            html += `<div class="article-card">
-                <div class="article-title">${escapeHtml(a.title)}</div>
-                <div class="article-meta">
-                    <span class="tag tag-source">${a.source}</span>
-                    ${a.year ? `<span class="tag">${a.year}</span>` : ''}
-                    ${a.citation_count != null ? `<span class="tag tag-cites">${a.citation_count} cites</span>` : ''}
+        currentArticles.forEach((a, i) => {
+            html += `<div class="article-card" id="article-${i}">
+                <div class="article-top">
+                    <label class="article-select" title="选中以便导出">
+                        <input type="checkbox" class="article-check" data-idx="${i}">
+                    </label>
+                    <div class="article-main">
+                        <div class="article-title">${escapeHtml(a.title)}</div>
+                        <div class="article-meta">
+                            <span class="tag tag-source">${a.source}</span>
+                            ${a.sources && a.sources.split(';').length > 1 ? `<span class="tag tag-merged" title="${escapeHtml(a.sources)}">🔗 ${a.sources.split(';').length} 库</span>` : ''}
+                            ${a.year ? `<span class="tag">${a.year}</span>` : ''}
+                            ${a.citation_count != null ? `<span class="tag tag-cites">${a.citation_count} cites</span>` : ''}
+                        </div>
+                        ${a.authors ? `<div class="article-authors">${escapeHtml(a.authors)}</div>` : ''}
+                        ${a.venue ? `<div class="article-venue">${escapeHtml(a.venue)}</div>` : ''}
+                        ${a.doi ? `<div class="article-doi">DOI: <a href="https://doi.org/${a.doi}" target="_blank" rel="noopener">${a.doi}</a></div>` : ''}
+                        ${a.abstract ? `<div class="article-abstract">${escapeHtml(a.abstract)}</div>` : ''}
+                        <div class="article-actions">
+                            <button class="btn-link" data-preview="${i}" title="站内查看完整摘要与详情">🔍 快速预览</button>
+                            ${a.url ? `<a class="btn-link" href="${a.url}" target="_blank" rel="noopener">↗ 原文</a>` : ''}
+                        </div>
+                    </div>
                 </div>
-                ${a.authors ? `<div class="article-authors">${escapeHtml(a.authors)}</div>` : ''}
-                ${a.venue ? `<div class="article-venue">${escapeHtml(a.venue)}</div>` : ''}
-                ${a.doi ? `<div class="article-doi">DOI: <a href="https://doi.org/${a.doi}" target="_blank">${a.doi}</a></div>` : ''}
-                ${a.url ? `<div class="article-link"><a href="${a.url}" target="_blank">查看原文</a></div>` : ''}
-                ${a.abstract ? `<div class="article-abstract">${escapeHtml(a.abstract)}</div>` : ''}
             </div>`;
         });
         html += '</div>';
@@ -202,6 +279,187 @@ function displayResults(data) {
     } else {
         resultsArea.innerHTML = '<p class="no-results">未找到结果</p>';
     }
+}
+
+// ── 多选与导出 ──
+
+document.addEventListener('change', (e) => {
+    if (e.target.classList.contains('article-check')) {
+        const idx = parseInt(e.target.dataset.idx, 10);
+        if (e.target.checked) selectedIdx.add(idx);
+        else selectedIdx.delete(idx);
+        document.getElementById(`article-${idx}`)?.classList.toggle('selected', e.target.checked);
+        updateActionBar();
+    }
+    if (e.target.id === 'selectAll') {
+        const checks = document.querySelectorAll('.article-check');
+        checks.forEach(cb => {
+            cb.checked = e.target.checked;
+            const idx = parseInt(cb.dataset.idx, 10);
+            if (e.target.checked) selectedIdx.add(idx); else selectedIdx.delete(idx);
+            document.getElementById(`article-${idx}`)?.classList.toggle('selected', e.target.checked);
+        });
+        updateActionBar();
+    }
+});
+
+function getSelectedArticles() {
+    return Array.from(selectedIdx).sort((a, b) => a - b).map(i => currentArticles[i]);
+}
+
+function updateActionBar() {
+    const bar = document.getElementById('actionBar');
+    const count = document.getElementById('actionCount');
+    if (currentArticles.length === 0) { bar.classList.add('hidden'); return; }
+    bar.classList.remove('hidden');
+    count.textContent = `已选 ${selectedIdx.size} 篇`;
+}
+
+// 导出 / 复制
+document.querySelectorAll('[data-export]').forEach(btn => {
+    btn.addEventListener('click', async () => {
+        const articles = getSelectedArticles();
+        if (articles.length === 0) { showToast('请先勾选要导出的文献', 'warn'); return; }
+        const format = btn.dataset.export;
+        const keywords = document.getElementById('keywords').value.trim();
+        if (format === 'text') return copySelected(articles, keywords);
+
+        btn.disabled = true;
+        try {
+            const resp = await fetch('/api/export', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ format, articles, keywords, save: true }),
+            });
+            if (!resp.ok) throw new Error('导出失败 (' + resp.status + ')');
+            const blob = await resp.blob();
+            const a = document.createElement('a');
+            a.href = URL.createObjectURL(blob);
+            a.download = resp.headers.get('content-disposition')?.match(/filename\*?=(?:UTF-8''")?([^;"]+)/)?.[1] || `litscan.${format}`;
+            a.click();
+            URL.revokeObjectURL(a.href);
+            const savedPath = resp.headers.get('x-export-path');
+            showToast(`已导出 ${articles.length} 篇${savedPath ? '，已留档 out/exports/' : ''}`, 'ok');
+        } catch (e) {
+            showToast(e.message, 'err');
+        } finally {
+            btn.disabled = false;
+        }
+    });
+});
+
+async function copySelected(articles, keywords) {
+    try {
+        const resp = await fetch('/api/export', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ format: 'text', articles, keywords, save: false }),
+        });
+        if (!resp.ok) throw new Error('生成失败 (' + resp.status + ')');
+        const text = await resp.text();
+        await navigator.clipboard.writeText(text);
+        showToast(`已复制 ${articles.length} 篇到剪贴板`, 'ok');
+    } catch (e) {
+        showToast(e.message, 'err');
+    }
+}
+
+// ── 快速预览 ──
+
+document.addEventListener('click', async (e) => {
+    const btn = e.target.closest('[data-preview]');
+    if (!btn) return;
+    const a = currentArticles[parseInt(btn.dataset.preview, 10)];
+    if (!a) return;
+    openPreview(a);
+});
+
+function openPreview(a) {
+    const modal = document.getElementById('previewModal');
+    const body = document.getElementById('previewBody');
+    modal.classList.remove('hidden');
+    document.body.style.overflow = 'hidden';
+    body.innerHTML = '<p class="loading">正在回源获取详情...</p>';
+
+    const params = new URLSearchParams({ source: a.source });
+    if (a.url) params.set('url', a.url);
+    if (a.doi) params.set('doi', a.doi);
+
+    fetch('/api/article/detail?' + params.toString())
+        .then(async resp => {
+            if (resp.status === 501) {
+                const msg = (await resp.json()).detail || '该源暂不支持站内预览';
+                body.innerHTML = `<p class="preview-empty">${escapeHtml(msg)}</p>` + fallbackHtml(a);
+                return;
+            }
+            if (!resp.ok) {
+                const err = await resp.json().catch(() => ({}));
+                throw new Error(err.detail || '获取失败 (' + resp.status + ')');
+            }
+            renderDetail(await resp.json(), a);
+        })
+        .catch(err => {
+            body.innerHTML = `<p class="preview-error">✗ ${escapeHtml(err.message)}</p>` + fallbackHtml(a);
+        });
+}
+
+function fallbackHtml(a) {
+    return a.url ? `<p class="preview-fallback">试试直接访问：<a href="${a.url}" target="_blank" rel="noopener">${escapeHtml(a.url)}</a></p>` : '';
+}
+
+function fieldList(obj, keys) {
+    return keys.filter(k => obj[k] != null && obj[k] !== '').map(k => {
+        let v = Array.isArray(obj[k]) ? obj[k].join('; ') : obj[k];
+        return `<div class="detail-row"><span class="detail-key">${k}</span><span class="detail-val">${escapeHtml(String(v))}</span></div>`;
+    }).join('');
+}
+
+function renderDetail(d, a) {
+    const authors = Array.isArray(d.authors) ? d.authors.join('; ') : (d.authors || '');
+    const links = [];
+    if (d.pdf_url) links.push(`<a class="btn btn-small" href="${d.pdf_url}" target="_blank" rel="noopener">📄 PDF</a>`);
+    if (a.doi) links.push(`<a class="btn btn-small" href="https://doi.org/${a.doi}" target="_blank" rel="noopener">DOI 页面</a>`);
+    if (a.url) links.push(`<a class="btn btn-small" href="${a.url}" target="_blank" rel="noopener">原文</a>`);
+
+    document.getElementById('previewBody').innerHTML = `
+        <div class="detail-title">${escapeHtml(d.title || a.title)}</div>
+        <div class="article-meta">
+            <span class="tag tag-source">${d.source}</span>
+            ${d.year ? `<span class="tag">${d.year}</span>` : ''}
+            ${d.citation_count != null ? `<span class="tag tag-cites">${d.citation_count} cites</span>` : ''}
+            ${d.cached ? '<span class="tag">cached</span>' : ''}
+        </div>
+        ${authors ? `<div class="article-authors">${escapeHtml(authors)}</div>` : ''}
+        ${d.venue ? `<div class="article-venue">${escapeHtml(d.venue)}</div>` : ''}
+        ${links.length ? `<div class="detail-links">${links.join('')}</div>` : ''}
+        ${d.abstract ? `<div class="detail-abstract">${escapeHtml(d.abstract)}</div>` : '<p class="preview-empty">该源未提供摘要</p>'}
+        <div class="detail-fields">
+            ${fieldList(d, ['venue', 'publisher', 'type', 'volume', 'issue', 'pages', 'references_count', 'comment', 'journal_ref', 'categories', 'keywords', 'decision', 'tldr', 'pmid'])}
+        </div>
+    `;
+}
+
+// 关闭弹窗
+document.getElementById('previewClose').addEventListener('click', closePreview);
+document.getElementById('previewModal').addEventListener('click', (e) => {
+    if (e.target.id === 'previewModal') closePreview();
+});
+document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') closePreview();
+});
+function closePreview() {
+    document.getElementById('previewModal').classList.add('hidden');
+    document.body.style.overflow = '';
+}
+
+// ── 轻提示 ──
+let toastTimer = null;
+function showToast(msg, type = 'ok') {
+    const t = document.getElementById('toast');
+    t.textContent = msg;
+    t.className = 'toast toast-' + type;
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => t.classList.add('hidden'), 2600);
 }
 
 function escapeHtml(text) {

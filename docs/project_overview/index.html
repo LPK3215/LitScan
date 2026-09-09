@@ -66,7 +66,7 @@
     <div class="hero-bg" aria-hidden="true"></div>
     <div class="hero-content">
       <div class="hero-badges">
-        <span class="badge badge-ver">v1.0.0</span>
+        <span class="badge badge-ver">v1.1.0</span>
         <span class="badge">Python 3.9+</span>
         <span class="badge">MIT License</span>
         <span class="badge">Production/Stable</span>
@@ -82,6 +82,8 @@
         <div class="stat-card"><span class="stat-num" data-count="16">0</span><span class="stat-label">REST API 端点</span></div>
         <div class="stat-card"><span class="stat-num" data-count="3">0</span><span class="stat-label">使用方式</span></div>
         <div class="stat-card"><span class="stat-num" data-count="4" data-suffix="×">0</span><span class="stat-label">自动重试上限</span></div>
+        <div class="stat-card"><span class="stat-num" data-count="5">0</span><span class="stat-label">导出格式</span></div>
+        <div class="stat-card"><span class="stat-num" data-count="6">0</span><span class="stat-label">可预览数据源</span></div>
       </div>
     </div>
   </header>
@@ -255,6 +257,36 @@
         <p>每次检索落盘为 JSON 记录（关键词/源/年份/条数/各源命中），Web 一键重跑、CLI <code>--retry &lt;ID&gt;</code>、API <code>POST /api/history/retry/{id}</code> 三端复用。</p>
       </div>
     </div>
+    <div class="card-grid">
+      <div class="card">
+        <div class="card-icon">🧹</div>
+        <h3>跨库去重</h3>
+        <p>DOI 主键归一化匹配优先，无 DOI 时用「归一化标题 + 年份」兜底；重复条目合并到信息更全的那条，命中来源记录到 <code>sources</code> 字段。</p>
+      </div>
+      <div class="card">
+        <div class="card-icon">📶</div>
+        <h3>结果排序</h3>
+        <p><code>relevance</code> 保留相关度原序、<code>citations</code> 按引用数、<code>year</code> 按年份。CLI <code>--sort-by</code>、API <code>sort_by</code>、配置 <code>query.sort_by</code> 三端一致。</p>
+      </div>
+      <div class="card">
+        <div class="card-icon">📤</div>
+        <h3>多选导出</h3>
+        <p>Markdown 收藏 / BibTeX / EndNote(RIS) / CSV / 纯文本五种格式，勾选后一键下载或复制，同时在 <code>out/exports/</code> 留档。</p>
+      </div>
+    </div>
+    <div class="card code-card">
+      <div class="code-header"><span>core/dedup.py — DOI 主键 + 标题兜底去重（节选）</span><button class="copy-btn" data-copy>复制</button></div>
+      <pre class="code-block"><code><span class="c-key">for</span> a <span class="c-key">in</span> articles:
+    dkey = _norm_doi(a.doi)
+    tkey = (_norm_title(a.title), a.year) <span class="c-key">if</span> _norm_title(a.title) <span class="c-key">else</span> <span class="c-key">None</span>
+    <span class="c-key">if</span> dkey <span class="c-key">and</span> dkey <span class="c-key">in</span> by_doi:
+        target, reason = by_doi[dkey], <span class="c-str">"by_doi"</span>
+    <span class="c-key">elif</span> tkey <span class="c-key">and</span> tkey <span class="c-key">in</span> by_title:
+        target, reason = by_title[tkey], <span class="c-str">"by_title"</span>
+    <span class="c-key">if</span> target <span class="c-key">is not None</span>:
+        _merge(target, a)   <span class="c-com"># 补缺失字段 / 取更大引用数 / 合并来源</span>
+        stats[<span class="c-str">"removed"</span>] += <span class="c-num">1</span></code></pre>
+    </div>
     <div class="card code-card">
       <div class="code-header"><span>core/fetcher.py — 429 限流退避（节选）</span><button class="copy-btn" data-copy>复制</button></div>
       <pre class="code-block"><code><span class="ln">1</span><span class="c-key">if</span> resp.status_code == <span class="c-num">429</span>:
@@ -282,6 +314,9 @@
             <div class="tree-item leaf"><span class="tree-name file">history.py</span><span class="tree-desc">搜索历史（JSON 落盘，可重跑）</span></div>
             <div class="tree-item leaf"><span class="tree-name file">logger.py</span><span class="tree-desc">操作日志（/logs 页面数据源）</span></div>
             <div class="tree-item leaf"><span class="tree-name file">output.py</span><span class="tree-desc">CSV / Markdown 日志输出</span></div>
+            <div class="tree-item leaf"><span class="tree-name file">dedup.py</span><span class="tree-desc">跨库去重 (DOI + 标题) 与排序</span></div>
+            <div class="tree-item leaf"><span class="tree-name file">exporter.py</span><span class="tree-desc">五种格式导出</span></div>
+            <div class="tree-item leaf"><span class="tree-name file">article_detail.py</span><span class="tree-desc">文章详情回源（站内预览）</span></div>
           </div>
           <div class="tree-item"><span class="tree-toggle" data-toggle></span><span class="tree-name dir">server/</span><span class="tree-desc">FastAPI 后端 + 模板路由</span></div>
           <div class="tree-children">
@@ -307,6 +342,7 @@
             <div class="tree-item leaf"><span class="tree-name file">log.md</span><span class="tree-desc">检索日志</span></div>
             <div class="tree-item leaf"><span class="tree-name file">history.json</span><span class="tree-desc">搜索历史</span></div>
             <div class="tree-item leaf"><span class="tree-name file">raw/</span><span class="tree-desc">各库原始响应</span></div>
+            <div class="tree-item leaf"><span class="tree-name file">exports/</span><span class="tree-desc">多选导出留档</span></div>
           </div>
           <div class="tree-item leaf root-leaf"><span class="tree-name file">litscan.py</span><span class="tree-desc">CLI 入口（内置 Windows GBK 修复）</span></div>
           <div class="tree-item leaf root-leaf"><span class="tree-name file">config.yaml</span><span class="tree-desc">检索源 / 查询 / 输出 / 请求 / 历史配置</span></div>
@@ -375,6 +411,8 @@ history:
           <tr data-method="GET"><td><span class="method m-get">GET</span></td><td><code>/api/search/stream</code></td><td>SSE 流式检索（实时进度）</td></tr>
           <tr data-method="POST"><td><span class="method m-post">POST</span></td><td><code>/api/search/{source}</code></td><td>单库检索</td></tr>
           <tr data-method="GET"><td><span class="method m-get">GET</span></td><td><code>/api/articles</code></td><td>最近一次结果</td></tr>
+          <tr data-method="POST"><td><span class="method m-post">POST</span></td><td><code>/api/export</code></td><td>多选导出 (md/bibtex/endnote/csv/text)</td></tr>
+          <tr data-method="GET"><td><span class="method m-get">GET</span></td><td><code>/api/article/detail</code></td><td>文章详情回源（站内预览）</td></tr>
           <tr data-method="GET"><td><span class="method m-get">GET</span></td><td><code>/api/stats</code></td><td>运行统计</td></tr>
           <tr data-method="GET"><td><span class="method m-get">GET</span></td><td><code>/api/history</code></td><td>搜索历史</td></tr>
           <tr data-method="GET"><td><span class="method m-get">GET</span></td><td><code>/api/history/stats</code></td><td>历史统计</td></tr>
@@ -460,9 +498,9 @@ python test_server_edge.py   <span class="c-com"># 服务端接口（仅验证�
     <div class="card roadmap-card">
       <h3>🗺️ 后续路线</h3>
       <ul>
-        <li>跨库去重（DOI 主键匹配）</li>
-        <li>检索结果引用数排序</li>
-        <li>导出 BibTeX / EndNote</li>
+        <li>全文 PDF 批量抓取</li>
+        <li>相似文献推荐</li>
+        <li>检索结果收藏夹</li>
       </ul>
     </div>
   </section>
@@ -480,4 +518,4 @@ python test_server_edge.py   <span class="c-com"># 服务端接口（仅验证�
 <script src="./script.js"></script>
 </body>
 </html>
-<!-- Generated by WorkBuddy (Walker) · 2026-09-09 · LitScan v1.0.0 project overview -->
+<!-- Generated by WorkBuddy (Walker) · 2026-09-09 · LitScan v1.1.0 project overview -->
