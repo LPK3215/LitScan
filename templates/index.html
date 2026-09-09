@@ -1,0 +1,153 @@
+{% extends "base.html" %}
+{% block title %}LitScan - 文献检索{% endblock %}
+
+{% block content %}
+<div class="search-page">
+    <h1>文献检索</h1>
+    <p class="subtitle">输入关键词，从多个学术数据库检索文献</p>
+
+    <!-- 搜索表单 -->
+    <form class="search-form" id="searchForm">
+        <div class="form-row">
+            <input type="text" id="keywords" name="keywords" class="input-keywords"
+                   placeholder="输入检索关键词，如: LLM agent evaluation" required>
+            <button type="submit" class="btn-search">检索</button>
+        </div>
+        <div class="form-row form-options">
+            <label>年份≥
+                <input type="number" id="yearFrom" name="year_from" placeholder="不限" min="1900" max="2030" class="input-year">
+            </label>
+            <label>每库
+                <input type="number" id="limit" name="limit" value="20" min="1" max="100" class="input-limit">
+            </label>
+            <span class="separator">|</span>
+            <span class="sources-label">数据源:</span>
+            <div class="sources-checkboxes" id="sourcesCheckboxes">
+                <!-- JS 动态填充 -->
+            </div>
+        </div>
+    </form>
+
+    <!-- 状态/进度 -->
+    <div id="statusArea" class="status-area hidden"></div>
+
+    <!-- 结果统计 -->
+    <div id="resultStats" class="result-stats hidden"></div>
+
+    <!-- 结果列表 -->
+    <div id="resultsArea" class="results-area"></div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+// 页面加载时获取数据源列表
+document.addEventListener('DOMContentLoaded', loadSources);
+
+async function loadSources() {
+    try {
+        const resp = await fetch('/api/sources');
+        const data = await resp.json();
+        const container = document.getElementById('sourcesCheckboxes');
+        container.innerHTML = '';
+        data.sources.forEach(s => {
+            const label = document.createElement('label');
+            label.className = 'checkbox-label';
+            label.innerHTML = `<input type="checkbox" name="sources" value="${s.name}" checked> ${s.name}`;
+            container.appendChild(label);
+        });
+    } catch(e) {
+        console.error('加载数据源失败:', e);
+    }
+}
+
+// 表单提交
+document.getElementById('searchForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    await doSearch();
+});
+
+async function doSearch() {
+    const keywords = document.getElementById('keywords').value.trim();
+    const yearFrom = document.getElementById('yearFrom').value;
+    const limit = document.getElementById('limit').value;
+    const selectedSources = Array.from(document.querySelectorAll('input[name="sources"]:checked'))
+                                 .map(cb => cb.value);
+
+    if (!keywords) return;
+
+    const statusArea = document.getElementById('statusArea');
+    const resultsArea = document.getElementById('resultsArea');
+    const resultStats = document.getElementById('resultStats');
+
+    statusArea.classList.remove('hidden');
+    statusArea.innerHTML = '<p class="loading">检索中...</p>';
+    resultsArea.innerHTML = '';
+    resultStats.classList.add('hidden');
+
+    const body = {
+        keywords: keywords,
+        sources: selectedSources.length > 0 ? selectedSources : null,
+        limit_per_source: parseInt(limit) || 20,
+        year_from: yearFrom ? parseInt(yearFrom) : null,
+    };
+
+    try {
+        const resp = await fetch('/api/search', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(body),
+        });
+        const data = await resp.json();
+
+        statusArea.classList.add('hidden');
+        resultStats.classList.remove('hidden');
+
+        // 统计
+        let statsHtml = `<span class="stat-total">共 ${data.total} 篇</span>`;
+        for (const [src, count] of Object.entries(data.per_source)) {
+            statsHtml += `<span class="stat-src ${count > 0 ? 'ok' : 'fail'}">${src}: ${count}</span>`;
+        }
+        if (data.errors) {
+            for (const [src, err] of Object.entries(data.errors)) {
+                statsHtml += `<span class="stat-err" title="${err}">${src}: 错误</span>`;
+            }
+        }
+        resultStats.innerHTML = statsHtml;
+
+        // 结果列表
+        if (data.articles && data.articles.length > 0) {
+            let html = '<div class="articles-list">';
+            data.articles.forEach(a => {
+                html += `<div class="article-card">
+                    <div class="article-title">${escapeHtml(a.title)}</div>
+                    <div class="article-meta">
+                        <span class="tag tag-source">${a.source}</span>
+                        ${a.year ? `<span class="tag">${a.year}</span>` : ''}
+                        ${a.citation_count != null ? `<span class="tag tag-cites">${a.citation_count} cites</span>` : ''}
+                    </div>
+                    ${a.authors ? `<div class="article-authors">${escapeHtml(a.authors)}</div>` : ''}
+                    ${a.venue ? `<div class="article-venue">${escapeHtml(a.venue)}</div>` : ''}
+                    ${a.doi ? `<div class="article-doi">DOI: <a href="https://doi.org/${a.doi}" target="_blank">${a.doi}</a></div>` : ''}
+                    ${a.url ? `<div class="article-link"><a href="${a.url}" target="_blank">查看原文</a></div>` : ''}
+                    ${a.abstract ? `<div class="article-abstract">${escapeHtml(a.abstract)}</div>` : ''}
+                </div>`;
+            });
+            html += '</div>';
+            resultsArea.innerHTML = html;
+        } else {
+            resultsArea.innerHTML = '<p class="no-results">未找到结果</p>';
+        }
+    } catch(e) {
+        statusArea.innerHTML = `<p class="error">检索出错: ${e.message}</p>`;
+    }
+}
+
+function escapeHtml(text) {
+    if (!text) return '';
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+</script>
+{% endblock %}

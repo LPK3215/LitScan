@@ -1,0 +1,102 @@
+{% extends "base.html" %}
+{% block title %}LitScan - 检索历史{% endblock %}
+
+{% block content %}
+<div class="history-page">
+    <h1>检索历史</h1>
+    <p class="subtitle">之前的检索记录，可重新执行</p>
+
+    <div class="history-toolbar">
+        <button onclick="clearHistory()" class="btn btn-danger">清空全部</button>
+    </div>
+
+    <div id="historyList" class="history-list">
+        <p class="loading">加载中...</p>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', loadHistory);
+
+async function loadHistory() {
+    const container = document.getElementById('historyList');
+    try {
+        const resp = await fetch('/api/history?limit=50');
+        const data = await resp.json();
+
+        if (!data.records || data.records.length === 0) {
+            container.innerHTML = '<p class="no-results">暂无检索记录</p>';
+            return;
+        }
+
+        let html = '';
+        data.records.forEach(r => {
+            const sourceTags = r.sources.map(s => '<span class="tag tag-source">' + s + '</span>').join('');
+            const perSrc = Object.entries(r.per_source).map(([k,v]) => k + ':' + v).join(', ');
+            html += '<div class="history-card" id="record-' + r.id + '">';
+            html += '  <div class="history-header">';
+            html += '    <span class="history-keywords">' + escapeHtml(r.keywords) + '</span>';
+            html += '    <span class="history-time">' + r.timestamp + '</span>';
+            html += '  </div>';
+            html += '  <div class="history-meta">' + sourceTags + '<span class="tag tag-cites">' + r.total_results + ' 篇</span>';
+            if (r.year_from) html += '<span class="tag">≥' + r.year_from + '</span>';
+            html += '  </div>';
+            html += '  <div class="history-detail">' + perSrc + '</div>';
+            html += '  <div class="history-actions">';
+            html += '    <button onclick="retrySearch(\'' + r.id + '\')" class="btn btn-small">重新检索</button>';
+            html += '    <button onclick="deleteRecord(\'' + r.id + '\')" class="btn btn-small btn-danger">删除</button>';
+            html += '  </div>';
+            html += '</div>';
+        });
+        container.innerHTML = html;
+    } catch(e) {
+        container.innerHTML = '<p class="error">加载失败: ' + e.message + '</p>';
+    }
+}
+
+async function retrySearch(recordId) {
+    if (!confirm('重新执行这次检索？')) return;
+    const container = document.getElementById('historyList');
+    container.innerHTML = '<p class="loading">检索中...</p>';
+    try {
+        const resp = await fetch('/api/history/retry/' + recordId, {method: 'POST'});
+        const data = await resp.json();
+        alert('检索完成: ' + data.total + ' 篇结果');
+        window.location.href = '/';
+    } catch(e) {
+        alert('检索失败: ' + e.message);
+        loadHistory();
+    }
+}
+
+async function deleteRecord(recordId) {
+    if (!confirm('删除这条记录？')) return;
+    try {
+        await fetch('/api/history/' + recordId, {method: 'DELETE'});
+        const el = document.getElementById('record-' + recordId);
+        if (el) el.remove();
+    } catch(e) {
+        alert('删除失败');
+    }
+}
+
+async function clearHistory() {
+    if (!confirm('清空全部历史记录？此操作不可恢复。')) return;
+    try {
+        await fetch('/api/history', {method: 'DELETE'});
+        loadHistory();
+    } catch(e) {
+        alert('清空失败');
+    }
+}
+
+function escapeHtml(text) {
+    if (!text) return '';
+    var div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+</script>
+{% endblock %}

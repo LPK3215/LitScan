@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% block title %}LitScan - 数据源{% endblock %}
+
+{% block content %}
+<div class="sources-page">
+    <h1>数据源</h1>
+    <p class="subtitle">LitScan 支持检索的学术数据库</p>
+
+    <div id="sourcesList" class="sources-list">
+        <p class="loading">加载中...</p>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', loadSources);
+
+async function loadSources() {
+    const container = document.getElementById('sourcesList');
+    try {
+        const resp = await fetch('/api/sources');
+        const data = await resp.json();
+
+        let html = '';
+        data.sources.forEach(s => {
+            html += '<div class="source-card">';
+            html += '  <div class="source-name">' + s.name + '</div>';
+            html += '  <div class="source-desc">' + (s.description || '') + '</div>';
+            html += '</div>';
+        });
+        container.innerHTML = html;
+    } catch(e) {
+        container.innerHTML = '<p class="error">加载失败: ' + e.message + '</p>';
+    }
+}
+</script>
+{% endblock %}

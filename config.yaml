@@ -1,0 +1,45 @@
+# LitScan 配置文件
+
+# ── 检索源 ──
+sources:
+  - name: arxiv
+    enabled: true
+  - name: semanticscholar
+    enabled: true
+  - name: crossref
+    enabled: true
+  - name: openreview
+    enabled: true
+  - name: openaire
+    enabled: true
+  - name: doaj
+    enabled: true
+  - name: europepmc
+    enabled: false  # 生物医学倾向，默认关
+
+# ── 检索式 ──
+query:
+  keywords: "LLM agent evaluation benchmark"
+  year_from: 2022
+  limit_per_source: 30
+
+# ── 输出 ──
+output:
+  dir: "./out"
+  save_raw: true
+  save_csv: true
+  save_log: true
+
+# ── 请求配置 ──
+request:
+  timeout: 45
+  max_retries: 4
+  retry_delay: 8
+  user_agent: "LitScan/1.0 (mailto:lpk.research@outlook.com)"
+  proxy: null  # null=自动读环境变量; "none"=不走代理; "http://ip:port"=自定义
+
+# ── 搜索历史 ──
+history:
+  enabled: true
+  file: "./out/history.json"
+  max_records: 200  # 最多保留条数
