@@ -2,6 +2,9 @@
 
 给关键词，自动从多个学术数据库拉取文章信息，输出标准化结果。
 
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![Python](https://img.shields.io/badge/python-3.9%2B-blue.svg)](https://www.python.org/)
+
 ## 快速开始
 
 ```bash
@@ -18,9 +21,10 @@ python litscan.py --serve     # 打开浏览器访问 http://127.0.0.1:8000
 ```
 
 页面:
-- `/` — 检索页面（输入关键词、选数据源、看结果）
+- `/` — 检索页面（输入关键词、选数据源、看结果，支持 SSE 流式进度）
 - `/history` — 检索历史（查看/重跑/删除）
 - `/sources` — 数据源列表
+- `/logs` — 操作日志（查看运行日志与统计）
 
 ### 2. CLI 模式
 

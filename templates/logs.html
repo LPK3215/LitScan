@@ -1,0 +1,135 @@
+{% extends "base.html" %}
+{% block title %}LitScan - 操作日志{% endblock %}
+
+{% block content %}
+<div class="logs-page">
+    <h1>操作日志</h1>
+    <p class="subtitle">查看所有检索操作和系统事件记录</p>
+
+    <!-- 工具栏 -->
+    <div class="logs-toolbar">
+        <div class="toolbar-left">
+            <label>筛选:
+                <select id="levelFilter" onchange="loadLogs()">
+                    <option value="">全部</option>
+                    <option value="INFO">信息</option>
+                    <option value="SUCCESS">成功</option>
+                    <option value="WARNING">警告</option>
+                    <option value="ERROR">错误</option>
+                    <option value="PROGRESS">进度</option>
+                </select>
+            </label>
+            <label style="margin-left: 1rem;">来源:
+                <select id="sourceFilter" onchange="loadLogs()">
+                    <option value="">全部</option>
+                    <option value="search">检索</option>
+                    <option value="api">API</option>
+                    <option value="system">系统</option>
+                </select>
+            </label>
+        </div>
+        <div class="toolbar-right">
+            <button class="btn btn-small" onclick="loadLogs()">刷新</button>
+            <button class="btn btn-small btn-danger" onclick="clearLogs()">清空日志</button>
+        </div>
+    </div>
+
+    <!-- 统计 -->
+    <div class="logs-stats" id="logsStats"></div>
+
+    <!-- 日志列表 -->
+    <div class="logs-list" id="logsList">
+        <p class="loading">加载中...</p>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+    loadLogs();
+    loadStats();
+});
+
+async function loadLogs() {
+    const level = document.getElementById('levelFilter').value;
+    const source = document.getElementById('sourceFilter').value;
+    const logsList = document.getElementById('logsList');
+
+    let url = '/api/logs?limit=100';
+    if (level) url += `&level=${level}`;
+    if (source) url += `&source=${source}`;
+
+    try {
+        const resp = await fetch(url);
+        const data = await resp.json();
+
+        if (data.entries.length === 0) {
+            logsList.innerHTML = '<p class="no-results">暂无日志记录</p>';
+            return;
+        }
+
+        let html = '';
+        data.entries.forEach(entry => {
+            const levelClass = getLevelClass(entry.level);
+            html += `<div class="log-entry ${levelClass}">
+                <span class="log-time">${entry.timestamp}</span>
+                <span class="log-level">${entry.level}</span>
+                <span class="log-source">[${entry.source}]</span>
+                <span class="log-message">${escapeHtml(entry.message)}</span>
+            </div>`;
+        });
+        logsList.innerHTML = html;
+    } catch(e) {
+        logsList.innerHTML = `<p class="error">加载失败: ${e.message}</p>`;
+    }
+}
+
+async function loadStats() {
+    try {
+        const resp = await fetch('/api/logs/stats');
+        const data = await resp.json();
+        const statsDiv = document.getElementById('logsStats');
+
+        let html = `<span class="stat-item">总计: ${data.total} 条</span>`;
+        if (data.level_counts) {
+            for (const [level, count] of Object.entries(data.level_counts)) {
+                html += `<span class="stat-item level-${level.toLowerCase()}">${level}: ${count}</span>`;
+            }
+        }
+        statsDiv.innerHTML = html;
+    } catch(e) {
+        console.error('加载统计失败:', e);
+    }
+}
+
+async function clearLogs() {
+    if (!confirm('确定要清空所有日志吗？')) return;
+
+    try {
+        await fetch('/api/logs', { method: 'DELETE' });
+        loadLogs();
+        loadStats();
+    } catch(e) {
+        alert('清空失败: ' + e.message);
+    }
+}
+
+function getLevelClass(level) {
+    switch(level) {
+        case 'SUCCESS': return 'log-success';
+        case 'ERROR': return 'log-error';
+        case 'WARNING': return 'log-warning';
+        case 'PROGRESS': return 'log-progress';
+        default: return 'log-info';
+    }
+}
+
+function escapeHtml(text) {
+    if (!text) return '';
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+</script>
+{% endblock %}

@@ -11,7 +11,7 @@
         <div class="form-row">
             <input type="text" id="keywords" name="keywords" class="input-keywords"
                    placeholder="输入检索关键词，如: LLM agent evaluation" required>
-            <button type="submit" class="btn-search">检索</button>
+            <button type="submit" class="btn-search" id="searchBtn">检索</button>
         </div>
         <div class="form-row form-options">
             <label>年份≥
@@ -28,8 +28,14 @@
         </div>
     </form>
 
-    <!-- 状态/进度 -->
-    <div id="statusArea" class="status-area hidden"></div>
+    <!-- 检索进度 -->
+    <div id="progressArea" class="progress-area hidden">
+        <div class="progress-header">
+            <span class="progress-title">检索进度</span>
+            <span class="progress-status" id="progressStatus">准备中...</span>
+        </div>
+        <div class="progress-log" id="progressLog"></div>
+    </div>
 
     <!-- 结果统计 -->
     <div id="resultStats" class="result-stats hidden"></div>
@@ -76,70 +82,125 @@ async function doSearch() {
 
     if (!keywords) return;
 
-    const statusArea = document.getElementById('statusArea');
+    const progressArea = document.getElementById('progressArea');
+    const progressLog = document.getElementById('progressLog');
+    const progressStatus = document.getElementById('progressStatus');
+    const resultsArea = document.getElementById('resultsArea');
+    const resultStats = document.getElementById('resultStats');
+    const searchBtn = document.getElementById('searchBtn');
+
+    // 重置显示
+    progressArea.classList.remove('hidden');
+    progressLog.innerHTML = '';
+    progressStatus.textContent = '准备中...';
+    resultsArea.innerHTML = '';
+    resultStats.classList.add('hidden');
+    searchBtn.disabled = true;
+    searchBtn.textContent = '检索中...';
+
+    const sourcesParam = selectedSources.join(',');
+
+    try {
+        // 使用 EventSource 进行 SSE 实时检索
+        const url = `/api/search/stream?keywords=${encodeURIComponent(keywords)}&sources=${encodeURIComponent(sourcesParam)}&limit_per_source=${limit}${yearFrom ? '&year_from=' + yearFrom : ''}`;
+
+        const eventSource = new EventSource(url);
+
+        eventSource.onmessage = (event) => {
+            const data = JSON.parse(event.data);
+            handleProgress(data, progressLog, progressStatus);
+        };
+
+        eventSource.onerror = (error) => {
+            eventSource.close();
+            searchBtn.disabled = false;
+            searchBtn.textContent = '检索';
+        };
+
+    } catch(e) {
+        progressLog.innerHTML += `<div class="log-entry log-error">出错: ${e.message}</div>`;
+        searchBtn.disabled = false;
+        searchBtn.textContent = '检索';
+    }
+}
+
+function handleProgress(data, progressLog, progressStatus) {
+    const type = data.type;
+
+    if (type === 'start') {
+        progressStatus.textContent = data.message;
+        progressLog.innerHTML += `<div class="log-entry log-info">${data.message}</div>`;
+    }
+    else if (type === 'progress') {
+        progressStatus.textContent = data.message;
+        progressLog.innerHTML += `<div class="log-entry log-progress">${data.message}</div>`;
+    }
+    else if (type === 'success') {
+        progressLog.innerHTML += `<div class="log-entry log-success">✓ ${data.message}</div>`;
+    }
+    else if (type === 'error') {
+        progressLog.innerHTML += `<div class="log-entry log-error">✗ ${data.message}</div>`;
+    }
+    else if (type === 'skip') {
+        progressLog.innerHTML += `<div class="log-entry log-warning">⊘ ${data.message}</div>`;
+    }
+    else if (type === 'complete') {
+        progressStatus.textContent = data.message;
+        progressLog.innerHTML += `<div class="log-entry log-info" style="font-weight:bold;margin-top:8px;">${data.message}</div>`;
+
+        // 显示结果
+        displayResults(data);
+
+        // 关闭按钮状态
+        const searchBtn = document.getElementById('searchBtn');
+        searchBtn.disabled = false;
+        searchBtn.textContent = '检索';
+    }
+
+    // 自动滚动到底部
+    progressLog.scrollTop = progressLog.scrollHeight;
+}
+
+function displayResults(data) {
     const resultsArea = document.getElementById('resultsArea');
     const resultStats = document.getElementById('resultStats');
 
-    statusArea.classList.remove('hidden');
-    statusArea.innerHTML = '<p class="loading">检索中...</p>';
-    resultsArea.innerHTML = '';
-    resultStats.classList.add('hidden');
+    resultStats.classList.remove('hidden');
 
-    const body = {
-        keywords: keywords,
-        sources: selectedSources.length > 0 ? selectedSources : null,
-        limit_per_source: parseInt(limit) || 20,
-        year_from: yearFrom ? parseInt(yearFrom) : null,
-    };
+    // 统计
+    let statsHtml = `<span class="stat-total">共 ${data.total} 篇</span>`;
+    for (const [src, count] of Object.entries(data.per_source)) {
+        statsHtml += `<span class="stat-src ${count > 0 ? 'ok' : 'fail'}">${src}: ${count}</span>`;
+    }
+    if (data.errors) {
+        for (const [src, err] of Object.entries(data.errors)) {
+            statsHtml += `<span class="stat-err" title="${err}">${src}: 错误</span>`;
+        }
+    }
+    resultStats.innerHTML = statsHtml;
 
-    try {
-        const resp = await fetch('/api/search', {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify(body),
+    // 结果列表
+    if (data.articles && data.articles.length > 0) {
+        let html = '<div class="articles-list">';
+        data.articles.forEach(a => {
+            html += `<div class="article-card">
+                <div class="article-title">${escapeHtml(a.title)}</div>
+                <div class="article-meta">
+                    <span class="tag tag-source">${a.source}</span>
+                    ${a.year ? `<span class="tag">${a.year}</span>` : ''}
+                    ${a.citation_count != null ? `<span class="tag tag-cites">${a.citation_count} cites</span>` : ''}
+                </div>
+                ${a.authors ? `<div class="article-authors">${escapeHtml(a.authors)}</div>` : ''}
+                ${a.venue ? `<div class="article-venue">${escapeHtml(a.venue)}</div>` : ''}
+                ${a.doi ? `<div class="article-doi">DOI: <a href="https://doi.org/${a.doi}" target="_blank">${a.doi}</a></div>` : ''}
+                ${a.url ? `<div class="article-link"><a href="${a.url}" target="_blank">查看原文</a></div>` : ''}
+                ${a.abstract ? `<div class="article-abstract">${escapeHtml(a.abstract)}</div>` : ''}
+            </div>`;
         });
-        const data = await resp.json();
-
-        statusArea.classList.add('hidden');
-        resultStats.classList.remove('hidden');
-
-        // 统计
-        let statsHtml = `<span class="stat-total">共 ${data.total} 篇</span>`;
-        for (const [src, count] of Object.entries(data.per_source)) {
-            statsHtml += `<span class="stat-src ${count > 0 ? 'ok' : 'fail'}">${src}: ${count}</span>`;
-        }
-        if (data.errors) {
-            for (const [src, err] of Object.entries(data.errors)) {
-                statsHtml += `<span class="stat-err" title="${err}">${src}: 错误</span>`;
-            }
-        }
-        resultStats.innerHTML = statsHtml;
-
-        // 结果列表
-        if (data.articles && data.articles.length > 0) {
-            let html = '<div class="articles-list">';
-            data.articles.forEach(a => {
-                html += `<div class="article-card">
-                    <div class="article-title">${escapeHtml(a.title)}</div>
-                    <div class="article-meta">
-                        <span class="tag tag-source">${a.source}</span>
-                        ${a.year ? `<span class="tag">${a.year}</span>` : ''}
-                        ${a.citation_count != null ? `<span class="tag tag-cites">${a.citation_count} cites</span>` : ''}
-                    </div>
-                    ${a.authors ? `<div class="article-authors">${escapeHtml(a.authors)}</div>` : ''}
-                    ${a.venue ? `<div class="article-venue">${escapeHtml(a.venue)}</div>` : ''}
-                    ${a.doi ? `<div class="article-doi">DOI: <a href="https://doi.org/${a.doi}" target="_blank">${a.doi}</a></div>` : ''}
-                    ${a.url ? `<div class="article-link"><a href="${a.url}" target="_blank">查看原文</a></div>` : ''}
-                    ${a.abstract ? `<div class="article-abstract">${escapeHtml(a.abstract)}</div>` : ''}
-                </div>`;
-            });
-            html += '</div>';
-            resultsArea.innerHTML = html;
-        } else {
-            resultsArea.innerHTML = '<p class="no-results">未找到结果</p>';
-        }
-    } catch(e) {
-        statusArea.innerHTML = `<p class="error">检索出错: ${e.message}</p>`;
+        html += '</div>';
+        resultsArea.innerHTML = html;
+    } else {
+        resultsArea.innerHTML = '<p class="no-results">未找到结果</p>';
     }
 }
 
