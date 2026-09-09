@@ -20,6 +20,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Page routes crashed on Starlette 1.x (deprecated `TemplateResponse` signature)
 - Search blocked the event loop; 429 rate-limit and retry events were swallowed (now streamed via SSE and executed in a thread pool)
 - Nav version badge showed v0.1 while the project was at v1.0.0
+- EventSource reconnected automatically after the server closed the stream, causing the search to repeat; the client now closes the connection on `complete`
+- `X-Export-Path` response header used raw bytes, throwing `UnicodeEncodeError` (HTTP 500) for any keyword containing non-latin-1 characters; now URL-encoded
+- `core/article_detail` returned source-specific fields under `extra`; the frontend could not read them. The unified `get_detail` flattens `extra` to the top level
+- Europe PMC author list returned raw dicts (`[object Object]` in the UI); now returns plain strings
+- Version strings drifted across `pyproject.toml` / `FastAPI` / `config.yaml` / `README` / `base.html`; aligned to v1.1.0
+- Frontend progress log inserted raw server messages into HTML; now escaped to prevent DOM breakage
+- `navigator.clipboard.writeText` failed outside HTTPS; added a `textarea + execCommand` fallback
 
 ### Changed
 - `Article` gained an optional `sources` field; CSV output includes it
@@ -38,5 +45,5 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Proxy support: config file, environment variables, `--no-proxy` override
 - Rate-limit handling with automatic retry and backoff
 
-[Unreleased]: https://github.com/LPK3215/LitScan/compare/v1.0.0...HEAD
+[Unreleased]: https://github.com/LPK3215/LitScan/compare/v1.1.0...HEAD
 [1.0.0]: https://github.com/LPK3215/LitScan/releases/tag/v1.0.0

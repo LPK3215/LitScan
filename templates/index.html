@@ -2,87 +2,87 @@
 {% block title %}LitScan - 文献检索{% endblock %}
 
 {% block content %}
-<div class="search-page">
-    <h1>文献检索</h1>
-    <p class="subtitle">输入关键词，从多个学术数据库检索文献</p>
+<div class="search-page" data-page-node-id="Eztr3S54hjuPSJeDG8HKoN">
+    <h1 data-page-node-id="1QXxbHuxJBBYGWjbRiOeC5">文献检索</h1>
+    <p class="subtitle" data-page-node-id="sCjPBMgu5KiJkzFEOa2vye">输入关键词，从多个学术数据库检索文献</p>
 
     <!-- 搜索表单 -->
-    <form class="search-form" id="searchForm">
-        <div class="form-row">
+    <form class="search-form" id="searchForm" data-page-node-id="ctnUiy9fpa6Q4ZgWorOcif">
+        <div class="form-row" data-page-node-id="6Y7LT8scmbtxTsdLDELJoX">
             <input type="text" id="keywords" name="keywords" class="input-keywords"
-                   placeholder="输入检索关键词，如: LLM agent evaluation" required>
-            <button type="submit" class="btn-search" id="searchBtn">检索</button>
+                   placeholder="输入检索关键词，如: LLM agent evaluation" required data-page-node-id="vK0ApbyYfn1qAOoK5UsMhs">
+            <button type="submit" class="btn-search" id="searchBtn" data-page-node-id="3MAI0mI048BHle0g4rFzAp">检索</button>
         </div>
-        <div class="form-row form-options">
-            <label>年份≥
-                <input type="number" id="yearFrom" name="year_from" placeholder="不限" min="1900" max="2030" class="input-year">
+        <div class="form-row form-options" data-page-node-id="T3AEFy4BBkUwHVsKH2Weep">
+            <label data-page-node-id="OEUekHvtq80gknEfrQyOcW">年份≥
+                <input type="number" id="yearFrom" name="year_from" placeholder="不限" min="1900" max="2030" class="input-year" data-page-node-id="wpVoJzGy7hfhZQZGaZE0GJ">
             </label>
-            <label>每库
-                <input type="number" id="limit" name="limit" value="20" min="1" max="100" class="input-limit">
+            <label data-page-node-id="jFG4xr3bHsAsC3bvXuLuDa">每库
+                <input type="number" id="limit" name="limit" value="20" min="1" max="100" class="input-limit" data-page-node-id="uxEz6VnZ2rD809J6qB4LZb">
             </label>
-            <label>排序
-                <select id="sortBy" name="sort_by" class="input-select">
-                    <option value="relevance">相关度</option>
-                    <option value="citations">引用数</option>
-                    <option value="year">年份</option>
+            <label data-page-node-id="9Ehut9PpfQbjVF5LnjpsUF">排序
+                <select id="sortBy" name="sort_by" class="input-select" data-page-node-id="ivo7hyjnEiGqD8GRqA9FXU">
+                    <option value="relevance" data-page-node-id="iFwRs2m3cDOTDrgy771WGD">相关度</option>
+                    <option value="citations" data-page-node-id="eWqr70MQKX79uUEYo4ee0n">引用数</option>
+                    <option value="year" data-page-node-id="2xWmuGDqJWLHzLkJ9c3bqz">年份</option>
                 </select>
             </label>
-            <label class="checkbox-label" title="同一篇被多个库命中时合并为一条">
-                <input type="checkbox" id="dedup" checked> 跨库去重
+            <label class="checkbox-label" title="同一篇被多个库命中时合并为一条" data-page-node-id="r3CNn7O5PsMHGCNt7N1KJs">
+                <input type="checkbox" id="dedup" checked data-page-node-id="1F963xaTDPeQ0gtAAKcImi"> 跨库去重
             </label>
-            <span class="separator">|</span>
-            <span class="sources-label">数据源:</span>
-            <div class="sources-checkboxes" id="sourcesCheckboxes">
+            <span class="separator" data-page-node-id="8yHJAAiNqkk3iAvtchLSom">|</span>
+            <span class="sources-label" data-page-node-id="pJJSFqjFTXnyEVJYXAynMx">数据源:</span>
+            <div class="sources-checkboxes" id="sourcesCheckboxes" data-page-node-id="MFqXPJVFRKnpeVAeBvqhCG">
                 <!-- JS 动态填充 -->
             </div>
         </div>
     </form>
 
     <!-- 检索进度 -->
-    <div id="progressArea" class="progress-area hidden">
-        <div class="progress-header">
-            <span class="progress-title">检索进度</span>
-            <span class="progress-status" id="progressStatus">准备中...</span>
+    <div id="progressArea" class="progress-area hidden" data-page-node-id="xYEiCRapikqLOELgznGRdf">
+        <div class="progress-header" data-page-node-id="YEHY1FjIq3l6lPgFhGFNFT">
+            <span class="progress-title" data-page-node-id="CMQAevBRU0F4vYQXnALHk9">检索进度</span>
+            <span class="progress-status" id="progressStatus" data-page-node-id="9cDkBD4k0914tfkG9meZ98">准备中...</span>
         </div>
-        <div class="progress-log" id="progressLog"></div>
+        <div class="progress-log" id="progressLog" data-page-node-id="9dm937CA46xNmAmULOKVud"></div>
     </div>
 
     <!-- 结果统计 -->
-    <div id="resultStats" class="result-stats hidden"></div>
+    <div id="resultStats" class="result-stats hidden" data-page-node-id="02FNz6uvLqmq0sgHQXR38C"></div>
 
     <!-- 结果列表 -->
-    <div id="resultsArea" class="results-area"></div>
+    <div id="resultsArea" class="results-area" data-page-node-id="QrpnUkV1sLToVpT31UoNPN"></div>
 </div>
 
 <!-- 多选操作栏 -->
-<div id="actionBar" class="action-bar hidden">
-    <label class="action-select-all">
-        <input type="checkbox" id="selectAll"> 全选
+<div id="actionBar" class="action-bar hidden" data-page-node-id="62ZdHVtEYbeuXlU9BWbL2f">
+    <label class="action-select-all" data-page-node-id="AKeoD9I8lNnKoHjnirTwTv">
+        <input type="checkbox" id="selectAll" data-page-node-id="hds4lzkoYL2eIYNTEH5Wac"> 全选
     </label>
-    <span class="action-count" id="actionCount">已选 0 篇</span>
-    <span class="action-sep"></span>
-    <button class="btn btn-small" data-export="markdown" title="保存为 Markdown 文献收藏">📥 Markdown</button>
-    <button class="btn btn-small" data-export="bibtex" title="保存为 BibTeX">📚 BibTeX</button>
-    <button class="btn btn-small" data-export="endnote" title="保存为 EndNote/Zotero 用的 RIS">📝 EndNote</button>
-    <button class="btn btn-small" data-export="csv" title="保存为 CSV">📊 CSV</button>
-    <button class="btn btn-small" data-export="text" title="复制纯文本到剪贴板">📋 复制</button>
+    <span class="action-count" id="actionCount" data-page-node-id="AVjh8Xal9Gb6hEKmuBtQ3O">已选 0 篇</span>
+    <span class="action-sep" data-page-node-id="Sok5xbBFxA5QI4WQ4CuNBJ"></span>
+    <button class="btn btn-small" data-export="markdown" title="保存为 Markdown 文献收藏" data-page-node-id="moqsC1zOYhpFRyCvyJc8Y3">📥 Markdown</button>
+    <button class="btn btn-small" data-export="bibtex" title="保存为 BibTeX" data-page-node-id="BgrnsvvM8nxkqOtGL6uZEF">📚 BibTeX</button>
+    <button class="btn btn-small" data-export="endnote" title="保存为 EndNote/Zotero 用的 RIS" data-page-node-id="1pJtYP8cDZ3tQ5Mq68eaEh">📝 EndNote</button>
+    <button class="btn btn-small" data-export="csv" title="保存为 CSV" data-page-node-id="GuAir7L5s5mIbHBFI1LAUW">📊 CSV</button>
+    <button class="btn btn-small" data-export="text" title="复制纯文本到剪贴板" data-page-node-id="1ArKjnQPxgGkZlrlAUlxlH">📋 复制</button>
 </div>
 
 <!-- 详情预览弹窗 -->
-<div id="previewModal" class="modal-overlay hidden">
-    <div class="modal-card" role="dialog" aria-modal="true">
-        <div class="modal-header">
-            <span class="modal-title">文献详情</span>
-            <button class="modal-close" id="previewClose" aria-label="关闭">&times;</button>
+<div id="previewModal" class="modal-overlay hidden" data-page-node-id="lnWQ3XHgHRMIlCtIkN5y9H">
+    <div class="modal-card" role="dialog" aria-modal="true" data-page-node-id="WQxd26ZyBJ1lzQvpylDVzK">
+        <div class="modal-header" data-page-node-id="809d0ngmCcF9HdRnKlYEAB">
+            <span class="modal-title" data-page-node-id="Z7mwTvBXJeOk1qLXEJPPN8">文献详情</span>
+            <button class="modal-close" id="previewClose" aria-label="关闭" data-page-node-id="lAqbDHqbl4XHtXELJCbD2h">&times;</button>
         </div>
-        <div class="modal-body" id="previewBody">
-            <p class="loading">加载中...</p>
+        <div class="modal-body" id="previewBody" data-page-node-id="UhlHcns8E8SMjufInL5tZi">
+            <p class="loading" data-page-node-id="eiw0Yk43UhbpNPH1NGogCk">加载中...</p>
         </div>
     </div>
 </div>
 
 <!-- 轻提示 -->
-<div id="toast" class="toast hidden"></div>
+<div id="toast" class="toast hidden" data-page-node-id="eiZLfsGPFJMVuc6oTCq5RT"></div>
 {% endblock %}
 
 {% block scripts %}
@@ -90,7 +90,7 @@
 // ── 全局状态 ──
 let currentArticles = [];   // 最近一次检索结果
 const selectedIdx = new Set();
-
+let es = null;              // 当前 SSE 连接句柄
 document.addEventListener('DOMContentLoaded', loadSources);
 
 async function loadSources() {
@@ -146,6 +146,9 @@ async function doSearch() {
     searchBtn.disabled = true;
     searchBtn.textContent = '检索中...';
 
+    // 关闭上一次可能残留的连接，避免重复检索
+    if (es) { es.close(); es = null; }
+
     const sourcesParam = selectedSources.join(',');
 
     try {
@@ -153,16 +156,23 @@ async function doSearch() {
         const url = `/api/search/stream?keywords=${encodeURIComponent(keywords)}&sources=${encodeURIComponent(sourcesParam)}&limit_per_source=${limit}${yearFrom ? '&year_from=' + yearFrom : ''}&dedup=${dedup}&sort_by=${sortBy}`;
 
         const eventSource = new EventSource(url);
+        es = eventSource;
 
         eventSource.onmessage = (event) => {
             const data = JSON.parse(event.data);
-            handleProgress(data, progressLog, progressStatus);
+            handleProgress(data, progressLog, progressStatus, eventSource);
         };
 
-        eventSource.onerror = (error) => {
+        // 连接断开（正常结束或异常）都要收尾，
+        // 否则浏览器默认会自动重连 → 同一检索被重复执行
+        eventSource.onerror = () => {
             eventSource.close();
-            searchBtn.disabled = false;
-            searchBtn.textContent = '检索';
+            if (es === eventSource) es = null;
+            const btn = document.getElementById('searchBtn');
+            if (btn.disabled) {
+                btn.disabled = false;
+                btn.textContent = '检索';
+            }
         };
 
     } catch(e) {
@@ -177,37 +187,40 @@ function handleProgress(data, progressLog, progressStatus) {
 
     if (type === 'start') {
         progressStatus.textContent = data.message;
-        progressLog.innerHTML += `<div class="log-entry log-info">${data.message}</div>`;
+        progressLog.innerHTML += `<div class="log-entry log-info">${escapeHtml(data.message)}</div>`;
     }
     else if (type === 'progress') {
         progressStatus.textContent = data.message;
-        progressLog.innerHTML += `<div class="log-entry log-progress">${data.message}</div>`;
+        progressLog.innerHTML += `<div class="log-entry log-progress">${escapeHtml(data.message)}</div>`;
     }
     else if (type === 'success') {
-        progressLog.innerHTML += `<div class="log-entry log-success">✓ ${data.message}</div>`;
+        progressLog.innerHTML += `<div class="log-entry log-success">✓ ${escapeHtml(data.message)}</div>`;
     }
     else if (type === 'error') {
-        progressLog.innerHTML += `<div class="log-entry log-error">✗ ${data.message}</div>`;
+        progressLog.innerHTML += `<div class="log-entry log-error">✗ ${escapeHtml(data.message)}</div>`;
     }
     else if (type === 'skip') {
-        progressLog.innerHTML += `<div class="log-entry log-warning">⊘ ${data.message}</div>`;
+        progressLog.innerHTML += `<div class="log-entry log-warning">⊘ ${escapeHtml(data.message)}</div>`;
     }
     else if (type === 'rate_limit') {
         progressStatus.textContent = data.message;
-        progressLog.innerHTML += `<div class="log-entry log-warning">⏳ ${data.message}</div>`;
+        progressLog.innerHTML += `<div class="log-entry log-warning">⏳ ${escapeHtml(data.message)}</div>`;
     }
     else if (type === 'retry') {
         progressStatus.textContent = data.message;
-        progressLog.innerHTML += `<div class="log-entry log-warning">↻ ${data.message}</div>`;
+        progressLog.innerHTML += `<div class="log-entry log-warning">↻ ${escapeHtml(data.message)}</div>`;
     }
     else if (type === 'complete') {
         progressStatus.textContent = data.message;
-        progressLog.innerHTML += `<div class="log-entry log-info" style="font-weight:bold;margin-top:8px;">${data.message}</div>`;
+        progressLog.innerHTML += `<div class="log-entry log-info" style="font-weight:bold;margin-top:8px;">${escapeHtml(data.message)}</div>`;
+
+        // 检索已结束，主动关闭连接（否则 EventSource 会重连并重复检索）
+        if (eventSource) { eventSource.close(); if (es === eventSource) es = null; }
 
         // 显示结果
         displayResults(data);
 
-        // 关闭按钮状态
+        // 恢复按钮状态
         const searchBtn = document.getElementById('searchBtn');
         searchBtn.disabled = false;
         searchBtn.textContent = '检索';
@@ -230,7 +243,7 @@ function displayResults(data) {
     }
     if (data.errors) {
         for (const [src, err] of Object.entries(data.errors)) {
-            statsHtml += `<span class="stat-err" title="${err}">${src}: 错误</span>`;
+            statsHtml += `<span class="stat-err" title="${escapeHtml(err)}">${escapeHtml(src)}: 错误</span>`;
         }
     }
     resultStats.innerHTML = statsHtml;
@@ -335,11 +348,16 @@ document.querySelectorAll('[data-export]').forEach(btn => {
             const blob = await resp.blob();
             const a = document.createElement('a');
             a.href = URL.createObjectURL(blob);
-            a.download = resp.headers.get('content-disposition')?.match(/filename\*?=(?:UTF-8''")?([^;"]+)/)?.[1] || `litscan.${format}`;
+            a.download = parseFilename(resp.headers.get('content-disposition'), format);
             a.click();
             URL.revokeObjectURL(a.href);
             const savedPath = resp.headers.get('x-export-path');
-            showToast(`已导出 ${articles.length} 篇${savedPath ? '，已留档 out/exports/' : ''}`, 'ok');
+            let savedName = '';
+            if (savedPath) {
+                try { savedName = decodeURIComponent(savedPath).split(/[\\/]/).pop(); }
+                catch (e) { savedName = ''; }
+            }
+            showToast(`已导出 ${articles.length} 篇${savedName ? `，已留档 out/exports/${savedName}` : ''}`, 'ok');
         } catch (e) {
             showToast(e.message, 'err');
         } finally {
@@ -434,7 +452,7 @@ function renderDetail(d, a) {
         ${links.length ? `<div class="detail-links">${links.join('')}</div>` : ''}
         ${d.abstract ? `<div class="detail-abstract">${escapeHtml(d.abstract)}</div>` : '<p class="preview-empty">该源未提供摘要</p>'}
         <div class="detail-fields">
-            ${fieldList(d, ['venue', 'publisher', 'type', 'volume', 'issue', 'pages', 'references_count', 'comment', 'journal_ref', 'categories', 'keywords', 'decision', 'tldr', 'pmid'])}
+            ${fieldList(d, ['doi', 'publisher', 'type', 'volume', 'issue', 'pages', 'references_count', 'comment', 'journal_ref', 'categories', 'primary_category', 'keywords', 'decision', 'tldr', 'pmid', 'influential_citations', 'publication_types'])}
         </div>
     `;
 }

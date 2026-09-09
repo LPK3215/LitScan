@@ -2,6 +2,9 @@
 LitScan 文章详情回源模块
 按 source + url/doi 回源拉取完整信息（全量摘要、作者、字段），供站内快速预览
 带 TTL 内存缓存，避免重复请求
+
+返回结构统一为扁平 dict：各源特有字段（tldr / keywords / decision / pmid 等）
+都会被提升到顶层，前端按同一套 key 渲染即可。
 """
 
 import re
@@ -219,14 +222,16 @@ def detail_europepmc(url: str, doi: str) -> dict:
     if not results:
         raise DetailNotFound("Europe PMC 未找到该 DOI")
     item = results[0]
+    authors = [a["fullName"] for a in (item.get("authorList", {}).get("author") or [])
+               if isinstance(a, dict) and a.get("fullName")]
+    if not authors:
+        authors = [a.strip() for a in (item.get("authorString") or "").split(",") if a.strip()]
     return {
         "source": "europepmc",
         "identifier": item.get("id"),
         "title": item.get("title", ""),
         "abstract": item.get("abstractText"),
-        "authors": [a for a in (item.get("authorList", {}).get("author", []) or [])
-                    if isinstance(a, dict) and a.get("fullName")] or
-                   ([a.strip() for a in (item.get("authorString") or "").split(",") if a.strip()]),
+        "authors": authors,
         "year": item.get("pubYear"),
         "venue": item.get("journalInfo", {}).get("journal", {}).get("title"),
         "doi": item.get("doi") or doi,
@@ -288,6 +293,15 @@ def get_detail(source: str, url: str = None, doi: str = None) -> dict:
 
     data = DETAIL_FETCHERS[source](url, doi)
     data["cached"] = False
+
+    # 把各源特有字段从 extra 提升到顶层，保证前端按统一 key 渲染
+    extra = data.pop("extra", {}) or {}
+    for k, v in extra.items():
+        if v not in (None, "", []) and k not in data:
+            data[k] = v
+    if extra:
+        data["extra"] = extra
+
     _cache_put(key, data)
     logger.info(f"详情回源成功: {source} {url or doi}")
     return data

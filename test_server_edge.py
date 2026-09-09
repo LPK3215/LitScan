@@ -194,11 +194,13 @@ r = client.post("/api/export", json={"format": "markdown", "articles": []})
 test("空列表返回 422", r.status_code == 422)
 
 # 7.5 留档
+from urllib.parse import unquote as _unquote
 r = client.post("/api/export", json={"format": "markdown", "articles": ARTICLES, "save": True})
-export_path = r.headers.get("x-export-path", "")
-test("留档路径写入响应头", "exports" in export_path and os.path.exists(export_path))
-if export_path and os.path.exists(export_path):
-    with open(export_path, "r", encoding="utf-8") as f:
+raw_path = r.headers.get("x-export-path", "")
+real_path = _unquote(raw_path) if raw_path else ""
+test("留档路径写入响应头", "exports" in real_path and os.path.exists(real_path))
+if real_path and os.path.exists(real_path):
+    with open(real_path, "r", encoding="utf-8") as f:
         test("留档内容与响应一致", "Attention Is All You Need" in f.read())
     # out/ 已被 .gitignore 忽略，留档文件无需删除
 
@@ -259,6 +261,105 @@ arts = [
 kept, st = deduplicate(arts)
 test("服务端可用去重函数", len(kept) == 2 and st["removed"] == 1)
 test("合并后带 sources", "; " in (kept[0].sources or ""))
+
+# ─────────────────────────────────────────────────────────────
+section("10. 前后端契约一致性")
+# ─────────────────────────────────────────────────────────────
+
+# 10.1 版本号与 pyproject.toml 一致
+import re as _re
+from core.exporter import FORMAT_META
+with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "pyproject.toml"),
+          encoding="utf-8") as _f:
+    _pv = _re.search(r'^version\s*=\s*"([^"]+)"', _f.read(), _re.M).group(1)
+test("FastAPI 版本 == pyproject 版本", app.version == _pv, f"{app.version} vs {_pv}")
+test("OpenAPI 版本同步", client.get("/openapi.json").json()["info"]["version"] == _pv)
+
+# 10.2 前端用到的导出格式后端全部支持
+FRONTEND_FORMATS = ["markdown", "bibtex", "endnote", "csv", "text"]
+test("导出格式枚举与前端一致", set(FRONTEND_FORMATS) == set(FORMAT_META.keys()),
+     str(set(FRONTEND_FORMATS) ^ set(FORMAT_META.keys())))
+for fmt in FRONTEND_FORMATS:
+    ok = client.post("/api/export", json={"format": fmt, "articles": ARTICLES, "save": False}).status_code == 200
+    test(f"导出 {fmt} 可用", ok)
+
+# 10.2.1 关键词含中文时导出也必须成功（回归：之前 X-Export-Path latin-1 失败 500）
+r = client.post("/api/export", json={"format": "markdown", "articles": ARTICLES,
+                                     "keywords": "对齐验证 中文关键词", "save": True})
+test("中文关键词导出留档 200", r.status_code == 200)
+test("中文关键词响应头 X-Export-Path 存在", r.headers.get("x-export-path"))
+test("中文关键词路径头 latin-1 安全（无原 UnicodeEncodeError）",
+     r.headers.get("x-export-path") is not None)
+
+# 10.3 SSE 参数校验与 POST 接口保持一致
+r = client.get("/api/search/stream", params={"keywords": "x", "sort_by": "nonsense", "sources": "arxiv"})
+test("SSE 非法 sort_by 返回 422", r.status_code == 422)
+r = client.get("/api/search/stream", params={"keywords": "x", "year_from": 1000, "sources": "arxiv"})
+test("SSE 非法 year_from 返回 422", r.status_code == 422)
+
+# 10.4 详情端点参数校验
+test("详情未知源 400", client.get("/api/article/detail", params={"source": "nope", "url": "http://x"}).status_code == 400)
+test("详情缺 url/doi 400", client.get("/api/article/detail", params={"source": "arxiv"}).status_code == 400)
+test("不支持回源的源 501", client.get("/api/article/detail", params={
+    "source": "openaire", "url": "http://x"}).status_code == 501)
+
+# 10.5 详情字段展平：extra 里的字段必须提升到顶层（前端统一渲染）
+import core.article_detail as _ad
+_orig_fetchers = dict(_ad.DETAIL_FETCHERS)
+_ad._cache.clear()
+_ad.DETAIL_FETCHERS["semanticscholar"] = lambda url, doi: {
+    "source": "semanticscholar", "title": "T", "abstract": "A",
+    "extra": {"tldr": "一句话总结", "influential_citations": 3},
+}
+try:
+    d = _ad.get_detail("semanticscholar", url="https://semanticscholar.org/paper/x",
+                       doi="10.1/y")
+    test("extra 字段提升到顶层 (tldr)", d.get("tldr") == "一句话总结")
+    test("extra 字段提升到顶层 (influential_citations)", d.get("influential_citations") == 3)
+    test("extra 仍保留", isinstance(d.get("extra"), dict))
+finally:
+    _ad.DETAIL_FETCHERS.clear()
+    _ad.DETAIL_FETCHERS.update(_orig_fetchers)
+    _ad._cache.clear()
+
+# 10.6 Europe PMC 作者必须是字符串（旧实现返回 dict 会导致前端 [object Object]）
+_orig_fetch = _ad.fetch
+
+_EPMC_PAYLOAD = {
+    "resultList": {"result": [{
+        "id": "123", "title": "P", "abstractText": "AB",
+        "authorList": {"author": [{"fullName": "Alice Wang"}, {"fullName": "Bob Li"}]},
+        "authorString": "Wang A, Li B", "pubYear": 2024,
+        "journalInfo": {"journal": {"title": "J"}}, "citedByCount": 5,
+    }]}
+}
+
+
+class _FakeResp:
+    def json(self):
+        return _EPMC_PAYLOAD
+
+
+_ad.fetch = lambda *a, **k: _FakeResp()
+try:
+    e = _ad.detail_europepmc(url="http://x", doi="10.1/z")
+    test("EuropePMC 作者为字符串", all(isinstance(x, str) for x in e["authors"]), str(e["authors"])[:60])
+    test("EuropePMC 作者内容正确", e["authors"] == ["Alice Wang", "Bob Li"])
+finally:
+    _ad.fetch = _orig_fetch
+
+# 10.7 缓存命中带 cached 标记
+_ad._cache.clear()
+_ad.DETAIL_FETCHERS["arxiv"] = lambda url, doi: {"source": "arxiv", "title": "T", "extra": {}}
+try:
+    _ad.get_detail("arxiv", url="http://arxiv.org/abs/1")
+    d2 = _ad.get_detail("arxiv", url="http://arxiv.org/abs/1")
+    test("缓存命中标记 cached", d2.get("cached") is True)
+    test("缓存副本不污染原数据", d2 is not _ad._cache["arxiv|http://arxiv.org/abs/1|"][1])
+finally:
+    _ad.DETAIL_FETCHERS.clear()
+    _ad.DETAIL_FETCHERS.update(_orig_fetchers)
+    _ad._cache.clear()
 
 # ─────────────────────────────────────────────────────────────
 print(f"\n{'='*60}")

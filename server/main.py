@@ -33,7 +33,7 @@ import queue
 from typing import Optional, AsyncGenerator
 from urllib.parse import quote
 
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.responses import StreamingResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
@@ -58,7 +58,7 @@ BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 app = FastAPI(
     title="LitScan",
     description="学术文献多库检索工具",
-    version="1.0.0",
+    version="1.1.0",
 )
 
 # 静态文件 + 模板
@@ -307,11 +307,13 @@ async def search_with_progress(keywords: str, sources: list[str], limit: int,
 
 @app.get("/api/search/stream")
 async def search_stream(keywords: str, sources: str = None, limit_per_source: int = 30,
-                        year_from: Optional[int] = None, proxy: Optional[str] = None,
-                        dedup: bool = True, sort_by: str = "relevance"):
+                        year_from: Optional[int] = Query(None, ge=1900, le=2030),
+                        proxy: Optional[str] = None, dedup: bool = True,
+                        sort_by: Literal["relevance", "citations", "year"] = "relevance"):
     """
     SSE 实时检索进度
     sources: 逗号分隔的源名称，如 "arxiv,semanticscholar,crossref"
+    dedup: 是否跨库去重；sort_by: relevance | citations | year
     """
     if not keywords:
         raise HTTPException(status_code=400, detail="关键词不能为空")
@@ -475,7 +477,7 @@ async def get_last_articles():
 @app.post("/api/export")
 async def export_articles(request: ExportRequest):
     """
-    多选导出：markdown(链接收藏) / bibtex / csv / text(复制用纯文本)
+    多选导出：markdown(链接收藏) / bibtex / endnote(RIS) / csv / text(复制用纯文本)
     save=true 时同时在 out/exports/ 留档，路径放响应头 X-Export-Path
     """
     fmt = request.format
@@ -501,7 +503,8 @@ async def export_articles(request: ExportRequest):
 
     headers = {}
     if export_path:
-        headers["X-Export-Path"] = export_path
+        # 路径可能含中文/非 latin-1 字符，HTTP 头必须编码，否则 starlette 会抛 UnicodeEncodeError
+        headers["X-Export-Path"] = quote(export_path)
 
     safe_kw = "".join(c for c in request.keywords if c.isalnum() or c in "-_ ")[:30].strip().replace(" ", "_")
     filename = f"litscan_{fmt}{('_' + safe_kw) if safe_kw else ''}.{meta['ext']}"

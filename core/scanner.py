@@ -97,7 +97,7 @@ class Scanner:
                     timeout=req_cfg.get("timeout", 45),
                     max_retries=req_cfg.get("max_retries", 4),
                     retry_delay=req_cfg.get("retry_delay", 8),
-                    user_agent=req_cfg.get("user_agent", "LitScan/1.0"),
+                    user_agent=req_cfg.get("user_agent", "LitScan/1.1"),
                     proxy=req_cfg.get("proxy"),
                     on_rate_limit=self._on_rate_limit,
                     on_retry=self._on_retry,

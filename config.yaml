@@ -37,7 +37,7 @@ request:
   timeout: 45
   max_retries: 4
   retry_delay: 8
-  user_agent: "LitScan/1.0 (mailto:lpk.research@outlook.com)"
+  user_agent: "LitScan/1.1 (mailto:lpk.research@outlook.com)"
   proxy: null  # null=自动读环境变量; "none"=不走代理; "http://ip:port"=自定义
 
 # ── 搜索历史 ──

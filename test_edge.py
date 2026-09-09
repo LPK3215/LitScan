@@ -239,7 +239,8 @@ finally:
     shutil.rmtree(tmpdir, ignore_errors=True)
 
 # 7.8 EndNote (RIS) 导出
-from core.exporter import to_ris
+from core.exporter import to_ris, FORMAT_META
+
 ris = to_ris(SAMPLE)
 test("RIS 以 TY 开头", ris.startswith("TY  - JOUR"))
 test("RIS 标题行", "TI  - Attention Is All You Need" in ris)
@@ -303,6 +304,17 @@ by_year = sort_articles(unsorted_set, by="year")
 test("按年份降序", by_year[0].year == 2024)
 by_rel = sort_articles(unsorted_set, by="relevance")
 test("relevance 保持原序", by_rel[0].title == "Low")
+
+# 8.6 导出格式注册表与生成函数一致（防止新增格式漏注册）
+test("FORMAT_META 覆盖全部格式",
+     set(FORMAT_META.keys()) == {"markdown", "bibtex", "endnote", "csv", "text"})
+for fmt in FORMAT_META:
+    test(f"build_export 支持 {fmt}", isinstance(build_export(fmt, SAMPLE, "kw"), bytes))
+try:
+    build_export("nonsense", SAMPLE)
+    test("未知格式抛 ValueError", False)
+except ValueError:
+    test("未知格式抛 ValueError", True)
 
 
 # ─────────────────────────────────────────────────────────────

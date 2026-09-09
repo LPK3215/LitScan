@@ -1,6 +1,6 @@
 """
 LitScan 导出模块
-将文章列表导出为 Markdown 收藏 / BibTeX / CSV / 纯文本
+将文章列表导出为 Markdown 收藏 / BibTeX / EndNote(RIS) / CSV / 纯文本
 纯函数，不发网络请求，便于测试
 """
 

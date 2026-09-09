@@ -45,7 +45,7 @@ def _get_proxies(proxy=None):
 
 
 def fetch(url, params=None, headers=None, timeout=45, max_retries=4,
-          retry_delay=8.0, user_agent="LitScan/1.0", proxy=None,
+          retry_delay=8.0, user_agent="LitScan/1.1", proxy=None,
           on_rate_limit=None, on_retry=None, source_name="", year_from=None):
     """
     HTTP GET + 智能重试 + 限流处理

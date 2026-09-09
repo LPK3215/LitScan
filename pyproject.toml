@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "litscan"
-version = "1.0.0"
+version = "1.1.0"
 description = "Academic literature multi-database search tool with CLI and FastAPI web UI"
 readme = "README.md"
 license = { file = "LICENSE" }
