@@ -467,6 +467,23 @@ h1::after {
 
 .source-desc { font-size: 0.85rem; color: var(--text-soft); line-height: 1.55; }
 
+/* 数据源页：全文下载能力徽章 */
+.source-download { margin-top: 0.6rem; display: flex; flex-direction: column; gap: 0.3rem; }
+.dl-badge {
+    align-self: flex-start;
+    font-size: 0.75rem;
+    font-weight: 600;
+    padding: 0.15rem 0.6rem;
+    border-radius: 999px;
+    background: #f1f5f9;
+    color: var(--text-soft);
+}
+.dl-badge-ok { background: #d1fae5; color: var(--ok); }
+.dl-badge-warn { background: #fef3c7; color: #b45309; }
+.dl-badge-off { background: #f1f5f9; color: var(--muted); }
+.dl-note { font-size: 0.78rem; color: var(--muted); line-height: 1.5; }
+.source-note-card { border-top-color: #6366f1; }
+
 /* 检索进度 */
 .progress-area {
     background: var(--card);

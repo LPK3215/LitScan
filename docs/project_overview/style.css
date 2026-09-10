@@ -252,6 +252,8 @@ code {
   border-radius: 999px; background: var(--accent-soft); color: var(--accent);
 }
 .tag-off { background: rgba(148, 163, 184, 0.15); color: var(--muted); }
+.tag-ok { background: rgba(52, 211, 153, 0.18); color: #059669; }
+.tag-warn { background: rgba(251, 191, 36, 0.20); color: #b45309; }
 .source-off { opacity: 0.72; }
 
 /* ── 代码块 ── */

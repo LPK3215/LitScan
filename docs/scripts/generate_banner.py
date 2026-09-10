@@ -16,9 +16,9 @@ from pathlib import Path
 # ── Editable stats (keep in sync with the codebase) ──
 STATS = [
     ("7", "Data Sources"),
-    ("16", "API Endpoints"),
-    ("53", "Edge Tests"),
-    ("1.9k+", "Lines of Python"),
+    ("20", "API Endpoints"),
+    ("240", "Edge Tests"),
+    ("3.2k+", "Lines of Python"),
 ]
 
 OUT = Path(__file__).resolve().parent.parent / "assets" / "banner.svg"
@@ -67,7 +67,7 @@ SVG = f"""<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 280" font-fa
 
   <text x="170" y="112" font-size="54" font-weight="800" fill="#f0f4ff">LitScan</text>
   <rect x="172" y="128" width="220" height="5" rx="2.5" fill="url(#accent)"/>
-  <text x="170" y="162" font-size="17" fill="#aab8d8">学术文献多库检索工具 · Multi-Database Academic Literature Scanner</text>
+  <text x="170" y="162" font-size="17" fill="#aab8d8">学术文献多库检索 · 开放全文 PDF 下载 · Multi-Database Literature Scanner</text>
 
 {chips()}
 </svg>

@@ -18,7 +18,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 - PDF download UX: multi-select downloads are chunked in the browser with live `n/N` progress, and results open a detail modal showing each item's status, size, channel (`via`), save directory and failure reason
-- Test suites expanded: frontend↔backend field contract + static template checks, data persistence (history / operation log / CSV / export archive / PDF resume), and a real-server HTTP smoke pass
+- Test suites expanded: frontend↔backend field contract + static template checks, data persistence (history / operation log / CSV / export archive / PDF resume), a real-server HTTP smoke pass, and doc-asset consistency checks (240 tests total)
+
+### Docs
+- Project overview dashboard (both `project_overview/` and the `docs/` copy) refreshed: new "开放全文下载" section with per-source capability table, updated hero stats (20 endpoints), inline architecture SVG (Full-text node + `pdf/` output), source download badges, API table, structure tree, quickstart, config sample and roadmap
+- Asset generators updated and re-run: `generate_architecture.py` (full-text download pipeline + 6 outputs), `generate_banner.py` (7 sources / 20 endpoints / 226 tests / 3.2k lines)
+- In-app `/sources` page now shows each source's full-text download capability (badge + reason) plus a "只走正规渠道" note
 
 ## [1.1.0] - 2026-09-09
 

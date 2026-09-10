@@ -1,4 +1,4 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 780" font-family="'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 840" font-family="'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif">
   <defs>
     <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
       <stop offset="0" stop-color="#0b1020"/>
@@ -9,15 +9,15 @@
     </marker>
   </defs>
 
-  <rect width="1200" height="780" fill="url(#bg)"/>
+  <rect width="1200" height="840" fill="url(#bg)"/>
   <text x="600" y="42" text-anchor="middle" font-size="21" font-weight="800" fill="#f0f4ff">LitScan Architecture</text>
-  <text x="600" y="64" text-anchor="middle" font-size="12" fill="#8b9cc0">config.yaml driven · retry &amp; rate-limit aware · proxy supported</text>
+  <text x="600" y="64" text-anchor="middle" font-size="12" fill="#8b9cc0">config.yaml driven · retry &amp; rate-limit aware · proxy supported · open-access full-text download</text>
 
   <!-- Layer 1: clients -->
   
   <rect x="105" y="92" width="300" height="66" rx="10" fill="#141d36" stroke="#2a3a5f" stroke-width="1.2"/>
   <text x="255" y="129" text-anchor="middle" font-size="15" font-weight="700" fill="#f0f4ff">CLI</text>
-  <text x="255" y="147" text-anchor="middle" font-size="11" fill="#8b9cc0"><tspan x="255" dy="0">litscan.py · search / history / retry</tspan></text>
+  <text x="255" y="147" text-anchor="middle" font-size="11" fill="#8b9cc0"><tspan x="255" dy="0">litscan.py · search / history / download</tspan></text>
   
   <rect x="450" y="92" width="300" height="66" rx="10" fill="#141d36" stroke="#2a3a5f" stroke-width="1.2"/>
   <text x="600" y="129" text-anchor="middle" font-size="15" font-weight="700" fill="#f0f4ff">Web UI</text>
@@ -25,7 +25,7 @@
   
   <rect x="795" y="92" width="300" height="66" rx="10" fill="#141d36" stroke="#2a3a5f" stroke-width="1.2"/>
   <text x="945" y="129" text-anchor="middle" font-size="15" font-weight="700" fill="#f0f4ff">REST API + SSE</text>
-  <text x="945" y="147" text-anchor="middle" font-size="11" fill="#8b9cc0"><tspan x="945" dy="0">16 endpoints · streaming progress</tspan></text>
+  <text x="945" y="147" text-anchor="middle" font-size="11" fill="#8b9cc0"><tspan x="945" dy="0">20 endpoints · streaming progress</tspan></text>
 
   <line x1="255" y1="158" x2="480" y2="206" stroke="#5b9dff" stroke-width="1.6" marker-end="url(#ah)"/>
   <line x1="600" y1="158" x2="600" y2="206" stroke="#5b9dff" stroke-width="1.6" marker-end="url(#ah)"/>
@@ -41,50 +41,71 @@
 
   <!-- Layer 3: core -->
   
-  <rect x="105" y="316" width="300" height="74" rx="10" fill="#182647" stroke="#34508c" stroke-width="1.2"/>
-  <text x="255" y="357" text-anchor="middle" font-size="15" font-weight="700" fill="#f0f4ff">Scanner</text>
-  <text x="255" y="375" text-anchor="middle" font-size="11" fill="#8b9cc0"><tspan x="255" dy="0">core/scanner.py · orchestration</tspan></text>
+  <rect x="105" y="316" width="232" height="74" rx="10" fill="#182647" stroke="#34508c" stroke-width="1.2"/>
+  <text x="221" y="348" text-anchor="middle" font-size="15" font-weight="700" fill="#f0f4ff">Scanner</text>
+  <text x="221" y="366" text-anchor="middle" font-size="11" fill="#8b9cc0"><tspan x="221" dy="0">core/scanner.py </tspan><tspan x="221" dy="18"> orchestration</tspan></text>
   
-  <rect x="450" y="316" width="300" height="74" rx="10" fill="#182647" stroke="#34508c" stroke-width="1.2"/>
-  <text x="600" y="357" text-anchor="middle" font-size="15" font-weight="700" fill="#f0f4ff">Fetcher</text>
-  <text x="600" y="375" text-anchor="middle" font-size="11" fill="#8b9cc0"><tspan x="600" dy="0">core/fetcher.py · retry x4 · proxy · timeout=45s</tspan></text>
+  <rect x="357" y="316" width="232" height="74" rx="10" fill="#182647" stroke="#34508c" stroke-width="1.2"/>
+  <text x="473" y="348" text-anchor="middle" font-size="15" font-weight="700" fill="#f0f4ff">Fetcher</text>
+  <text x="473" y="366" text-anchor="middle" font-size="11" fill="#8b9cc0"><tspan x="473" dy="0">core/fetcher.py </tspan><tspan x="473" dy="18"> retry x4 · proxy</tspan></text>
   
-  <rect x="795" y="316" width="300" height="74" rx="10" fill="#182647" stroke="#34508c" stroke-width="1.2"/>
-  <text x="945" y="357" text-anchor="middle" font-size="15" font-weight="700" fill="#f0f4ff">History / OperationLogger</text>
-  <text x="945" y="375" text-anchor="middle" font-size="11" fill="#8b9cc0"><tspan x="945" dy="0">core/history.py · core/logger.py</tspan></text>
+  <rect x="609" y="316" width="232" height="74" rx="10" fill="#1b2b52" stroke="#3f6bc0" stroke-width="1.2"/>
+  <text x="725" y="348" text-anchor="middle" font-size="15" font-weight="700" fill="#f0f4ff">Full-text</text>
+  <text x="725" y="366" text-anchor="middle" font-size="11" fill="#8b9cc0"><tspan x="725" dy="0">core/fulltext.py </tspan><tspan x="725" dy="18"> resolve + download</tspan></text>
+  
+  <rect x="861" y="316" width="232" height="74" rx="10" fill="#182647" stroke="#34508c" stroke-width="1.2"/>
+  <text x="977" y="357" text-anchor="middle" font-size="15" font-weight="700" fill="#f0f4ff">History / Log</text>
+  <text x="977" y="375" text-anchor="middle" font-size="11" fill="#8b9cc0"><tspan x="977" dy="0">core/history.py · core/logger.py</tspan></text>
 
-  <line x1="255" y1="390" x2="500" y2="434" stroke="#5b9dff" stroke-width="1.6" marker-end="url(#ah)"/>
-  <line x1="600" y1="390" x2="600" y2="434" stroke="#5b9dff" stroke-width="1.6" marker-end="url(#ah)"/>
-  <line x1="945" y1="390" x2="700" y2="434" stroke="#5b9dff" stroke-width="1.6" marker-end="url(#ah)"/>
+  <line x1="255" y1="390" x2="400" y2="448" stroke="#5b9dff" stroke-width="1.6" marker-end="url(#ah)"/>
+  <line x1="600" y1="390" x2="600" y2="448" stroke="#5b9dff" stroke-width="1.6" marker-end="url(#ah)"/>
+  <line x1="945" y1="390" x2="800" y2="448" stroke="#5b9dff" stroke-width="1.6" marker-end="url(#ah)"/>
 
   <!-- Layer 4: adapters -->
-  <text x="223" y="458" font-size="12" font-weight="700" fill="#8b9cc0">ADAPTERS · core/adapters.py (7)</text>
-  <g><rect x="223" y="470" width="172" height="46" rx="8" fill="#141d36" stroke="#2a3a5f"/><text x="309" y="497" text-anchor="middle" font-size="12" fill="#c6d4f0">arXiv</text></g>
-<g><rect x="417" y="470" width="172" height="46" rx="8" fill="#141d36" stroke="#2a3a5f"/><text x="503" y="497" text-anchor="middle" font-size="12" fill="#c6d4f0">Semantic Scholar</text></g>
-<g><rect x="611" y="470" width="172" height="46" rx="8" fill="#141d36" stroke="#2a3a5f"/><text x="697" y="497" text-anchor="middle" font-size="12" fill="#c6d4f0">Crossref</text></g>
-<g><rect x="805" y="470" width="172" height="46" rx="8" fill="#141d36" stroke="#2a3a5f"/><text x="891" y="497" text-anchor="middle" font-size="12" fill="#c6d4f0">OpenReview</text></g>
-<g><rect x="223" y="534" width="172" height="46" rx="8" fill="#141d36" stroke="#2a3a5f"/><text x="309" y="561" text-anchor="middle" font-size="12" fill="#c6d4f0">OpenAIRE</text></g>
-<g><rect x="417" y="534" width="172" height="46" rx="8" fill="#141d36" stroke="#2a3a5f"/><text x="503" y="561" text-anchor="middle" font-size="12" fill="#c6d4f0">DOAJ</text></g>
-<g><rect x="611" y="534" width="172" height="46" rx="8" fill="#141d36" stroke="#2a3a5f"/><text x="697" y="561" text-anchor="middle" font-size="12" fill="#c6d4f0">Europe PMC <tspan fill="#e8b34b" font-size="9"> (opt)</tspan></text></g>
+  <text x="223" y="440" font-size="12" font-weight="700" fill="#8b9cc0">ADAPTERS · core/adapters.py (7) · results carry doi / url for resolution</text>
+  <g><rect x="223" y="450" width="172" height="46" rx="8" fill="#141d36" stroke="#2a3a5f"/><text x="309" y="477" text-anchor="middle" font-size="12" fill="#c6d4f0">arXiv</text></g>
+<g><rect x="417" y="450" width="172" height="46" rx="8" fill="#141d36" stroke="#2a3a5f"/><text x="503" y="477" text-anchor="middle" font-size="12" fill="#c6d4f0">Semantic Scholar</text></g>
+<g><rect x="611" y="450" width="172" height="46" rx="8" fill="#141d36" stroke="#2a3a5f"/><text x="697" y="477" text-anchor="middle" font-size="12" fill="#c6d4f0">Crossref</text></g>
+<g><rect x="805" y="450" width="172" height="46" rx="8" fill="#141d36" stroke="#2a3a5f"/><text x="891" y="477" text-anchor="middle" font-size="12" fill="#c6d4f0">OpenReview</text></g>
+<g><rect x="223" y="514" width="172" height="46" rx="8" fill="#141d36" stroke="#2a3a5f"/><text x="309" y="541" text-anchor="middle" font-size="12" fill="#c6d4f0">OpenAIRE</text></g>
+<g><rect x="417" y="514" width="172" height="46" rx="8" fill="#141d36" stroke="#2a3a5f"/><text x="503" y="541" text-anchor="middle" font-size="12" fill="#c6d4f0">DOAJ</text></g>
+<g><rect x="611" y="514" width="172" height="46" rx="8" fill="#141d36" stroke="#2a3a5f"/><text x="697" y="541" text-anchor="middle" font-size="12" fill="#c6d4f0">Europe PMC <tspan fill="#e8b34b" font-size="9"> (opt)</tspan></text></g>
 
-  <!-- outputs row -->
-  <line x1="600" y1="580" x2="600" y2="668" stroke="#5b9dff" stroke-width="1.6" marker-end="url(#ah)" stroke-dasharray="5,4"/>
+  <!-- Download pipeline -->
+  <line x1="600" y1="560" x2="600" y2="596" stroke="#5b9dff" stroke-width="1.6" marker-end="url(#ah)"/>
   
-  <rect x="105" y="668" width="220" height="58" rx="10" fill="#12182b" stroke="#24406e" stroke-width="1.2"/>
-  <text x="215" y="701" text-anchor="middle" font-size="15" font-weight="700" fill="#f0f4ff">articles.csv</text>
-  <text x="215" y="719" text-anchor="middle" font-size="11" fill="#8b9cc0"><tspan x="215" dy="0">统一格式结果</tspan></text>
-  
-  <rect x="355" y="668" width="220" height="58" rx="10" fill="#12182b" stroke="#24406e" stroke-width="1.2"/>
-  <text x="465" y="701" text-anchor="middle" font-size="15" font-weight="700" fill="#f0f4ff">log.md</text>
-  <text x="465" y="719" text-anchor="middle" font-size="11" fill="#8b9cc0"><tspan x="465" dy="0">检索日志</tspan></text>
-  
-  <rect x="605" y="668" width="220" height="58" rx="10" fill="#12182b" stroke="#24406e" stroke-width="1.2"/>
-  <text x="715" y="701" text-anchor="middle" font-size="15" font-weight="700" fill="#f0f4ff">history.json</text>
-  <text x="715" y="719" text-anchor="middle" font-size="11" fill="#8b9cc0"><tspan x="715" dy="0">搜索历史 (max 200)</tspan></text>
-  
-  <rect x="855" y="668" width="220" height="58" rx="10" fill="#12182b" stroke="#24406e" stroke-width="1.2"/>
-  <text x="965" y="701" text-anchor="middle" font-size="15" font-weight="700" fill="#f0f4ff">out/raw/</text>
-  <text x="965" y="719" text-anchor="middle" font-size="11" fill="#8b9cc0"><tspan x="965" dy="0">各库原始响应</tspan></text>
+  <rect x="105" y="596" width="990" height="76" rx="10" fill="#152a4d" stroke="#3f6bc0" stroke-width="1.2"/>
+  <text x="600" y="629" text-anchor="middle" font-size="15" font-weight="700" fill="#f0f4ff">Full-text PDF Download Pipeline</text>
+  <text x="600" y="647" text-anchor="middle" font-size="11" fill="#8b9cc0"><tspan x="600" dy="0">resolve PDF link: arXiv / OpenReview direct · Semantic Scholar / Europe PMC / DOAJ (open access) </tspan><tspan x="600" dy="18"> DOI fallback: Unpaywall → OpenAlex · download: resume + %PDF magic + 20KB validation</tspan></text>
 
-  <text x="1178" y="766" text-anchor="end" font-size="10" fill="#5a6a8f">generated by docs/scripts/generate_architecture.py</text>
+  <line x1="600" y1="672" x2="600" y2="736" stroke="#5b9dff" stroke-width="1.6" marker-end="url(#ah)"/>
+
+  <!-- Outputs -->
+  <text x="105" y="726" font-size="12" font-weight="700" fill="#8b9cc0">OUTPUTS · out/</text>
+  
+  <rect x="105" y="736" width="151" height="58" rx="9" fill="#12182b" stroke="#24406e"/>
+  <text x="180" y="762" text-anchor="middle" font-size="13" font-weight="700" fill="#d8e3ff">articles.csv</text>
+  <text x="180" y="781" text-anchor="middle" font-size="10" fill="#8b9cc0">统一格式结果</text>
+
+  <rect x="272" y="736" width="151" height="58" rx="9" fill="#12182b" stroke="#24406e"/>
+  <text x="348" y="762" text-anchor="middle" font-size="13" font-weight="700" fill="#d8e3ff">log.md</text>
+  <text x="348" y="781" text-anchor="middle" font-size="10" fill="#8b9cc0">检索日志</text>
+
+  <rect x="439" y="736" width="151" height="58" rx="9" fill="#12182b" stroke="#24406e"/>
+  <text x="514" y="762" text-anchor="middle" font-size="13" font-weight="700" fill="#d8e3ff">history.json</text>
+  <text x="514" y="781" text-anchor="middle" font-size="10" fill="#8b9cc0">搜索历史</text>
+
+  <rect x="606" y="736" width="151" height="58" rx="9" fill="#12182b" stroke="#24406e"/>
+  <text x="682" y="762" text-anchor="middle" font-size="13" font-weight="700" fill="#d8e3ff">exports/</text>
+  <text x="682" y="781" text-anchor="middle" font-size="10" fill="#8b9cc0">导出留档</text>
+
+  <rect x="773" y="736" width="151" height="58" rx="9" fill="#12203a" stroke="#356bb0"/>
+  <text x="848" y="762" text-anchor="middle" font-size="13" font-weight="700" fill="#d8e3ff">pdf/</text>
+  <text x="848" y="781" text-anchor="middle" font-size="10" fill="#8b9cc0">开放全文 PDF</text>
+
+  <rect x="940" y="736" width="151" height="58" rx="9" fill="#12182b" stroke="#24406e"/>
+  <text x="1016" y="762" text-anchor="middle" font-size="13" font-weight="700" fill="#d8e3ff">raw/</text>
+  <text x="1016" y="781" text-anchor="middle" font-size="10" fill="#8b9cc0">各库原始响应</text>
+
+  <text x="1178" y="826" text-anchor="end" font-size="10" fill="#5a6a8f">generated by docs/scripts/generate_architecture.py</text>
 </svg>

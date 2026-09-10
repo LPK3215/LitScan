@@ -4,7 +4,7 @@
 {% block content %}
 <div class="sources-page">
     <h1>数据源</h1>
-    <p class="subtitle">LitScan 支持检索的学术数据库</p>
+    <p class="subtitle">LitScan 支持检索的学术数据库，以及各自的开放全文下载能力</p>
 
     <div id="sourcesList" class="sources-list">
         <p class="loading">加载中...</p>
@@ -16,23 +16,64 @@
 <script>
 document.addEventListener('DOMContentLoaded', loadSources);
 
+// 下载模式 → 徽章文案/样式
+const DL_BADGE = {
+    direct:    { text: '✅ 全文直下', cls: 'dl-badge-ok' },
+    api:       { text: '⚠️ 视开放获取', cls: 'dl-badge-warn' },
+    oa_lookup: { text: '🔎 DOI 兜底', cls: 'dl-badge-warn' },
+    none:      { text: '🚫 不支持下载', cls: 'dl-badge-off' }
+};
+
 async function loadSources() {
     const container = document.getElementById('sourcesList');
     try {
-        const resp = await fetch('/api/sources');
-        const data = await resp.json();
+        const [srcResp, dlResp] = await Promise.all([
+            fetch('/api/sources'),
+            fetch('/api/download/supported').catch(function () { return null; })
+        ]);
+        const data = await srcResp.json();
+
+        const support = {};
+        if (dlResp && dlResp.ok) {
+            const d = await dlResp.json();
+            (d.sources || []).forEach(function (s) { support[s.source] = s; });
+        }
 
         let html = '';
-        data.sources.forEach(s => {
+        data.sources.forEach(function (s) {
+            const sup = support[s.name];
+            const badge = sup ? (DL_BADGE[sup.mode] || DL_BADGE.none) : null;
             html += '<div class="source-card">';
-            html += '  <div class="source-name">' + s.name + '</div>';
-            html += '  <div class="source-desc">' + (s.description || '') + '</div>';
+            html += '  <div class="source-name">' + escapeHtml(s.name) + '</div>';
+            html += '  <div class="source-desc">' + escapeHtml(s.description || '') + '</div>';
+            if (badge) {
+                html += '  <div class="source-download">';
+                html += '    <span class="dl-badge ' + badge.cls + '">' + badge.text + '</span>';
+                if (sup.note) html += '    <span class="dl-note">' + escapeHtml(sup.note) + '</span>';
+                html += '  </div>';
+            }
             html += '</div>';
         });
+
+        // 说明：只走正规渠道
+        html += '<div class="source-card source-note-card">';
+        html += '  <div class="source-name">下载说明</div>';
+        html += '  <div class="source-desc">只走正规接口：源自身提供的 PDF 直链，以及第三方 OA 索引（Unpaywall / OpenAlex）'
+              + '已公开标注为开放获取的版本。付费墙后没有 OA 版本的不下载、不绕过；连程序化检索都不开放的平台'
+              + '（如中国知网 CNKI）直接放弃；不使用、也不复用任何登录会话。</div>';
+        html += '</div>';
+
         container.innerHTML = html;
-    } catch(e) {
-        container.innerHTML = '<p class="error">加载失败: ' + e.message + '</p>';
+    } catch (e) {
+        container.innerHTML = '<p class="error">加载失败: ' + escapeHtml(e.message) + '</p>';
     }
+}
+
+function escapeHtml(text) {
+    if (text === null || text === undefined) return '';
+    const div = document.createElement('div');
+    div.textContent = String(text);
+    return div.innerHTML;
 }
 </script>
 {% endblock %}

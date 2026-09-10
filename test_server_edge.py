@@ -429,6 +429,33 @@ test("首页含下载结果弹窗渲染逻辑", "openDownloadResult" in _html)
 for _page in ("/", "/history", "/sources", "/logs"):
     test(f"页面可访问 {_page}", client.get(_page).status_code == 200)
 
+# 12.8 数据源页展示各源全文下载能力
+_src_html = client.get("/sources").text
+test("数据源页引用下载支持接口", "/api/download/supported" in _src_html)
+test("数据源页含下载能力徽章", "dl-badge" in _src_html)
+
+# 12.9 展示页（项目全景）与 README 断言资源存在
+_root = os.path.dirname(os.path.abspath(__file__))
+for _rel in ("project_overview/index.html", "docs/project_overview/index.html",
+             "docs/assets/banner.svg", "docs/assets/architecture.svg",
+             "docs/scripts/generate_banner.py", "docs/scripts/generate_architecture.py"):
+    test(f"文档资产存在 {_rel}", os.path.exists(os.path.join(_root, _rel)))
+
+# 12.10 展示页引用了新功能关键词（防止文档与实现脱节）
+for _rel in ("project_overview/index.html", "docs/project_overview/index.html"):
+    with open(os.path.join(_root, _rel), encoding="utf-8") as _f:
+        _ov = _f.read()
+    test(f"{_rel} 含全文下载章节", 'id="download"' in _ov)
+    test(f"{_rel} 含下载 API", "/api/download" in _ov)
+
+# 12.11 两张 SVG 资产内容已更新
+with open(os.path.join(_root, "docs", "assets", "architecture.svg"), encoding="utf-8") as _f:
+    _arch = _f.read()
+test("架构图含 Full-text 管线", "Full-text" in _arch and "pdf/" in _arch)
+with open(os.path.join(_root, "docs", "assets", "banner.svg"), encoding="utf-8") as _f:
+    _banner = _f.read()
+test("banner 统计已更新（20 endpoints）", "20" in _banner and "API Endpoints" in _banner)
+
 
 # ─────────────────────────────────────────────────────────────
 print(f"\n{'='*60}")

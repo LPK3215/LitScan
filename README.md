@@ -289,6 +289,8 @@ LitScan/
 │   └── scripts/         # SVG 生成脚本 (可复用)
 │       ├── generate_banner.py
 │       └── generate_architecture.py
+├── project_overview/    # 项目全景展示页 (dashboard)
+├── project_overview.html# 展示页跳转入口
 ├── test_edge.py         # 核心模块边界测试
 └── test_server_edge.py  # 服务端边界测试
 ```
