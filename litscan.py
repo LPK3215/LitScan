@@ -13,9 +13,12 @@ LitScan · CLI 入口
   python litscan.py --history-search "LLM"   # 搜索历史记录
   python litscan.py --retry 20260909_123456  # 从历史记录重新检索
   python litscan.py --sources                # 列出可用检索源
+  python litscan.py --download               # 检索后下载开放全文 PDF (默认 20 篇)
+  python litscan.py --download-csv out/articles.csv  # 不检索，从 CSV 批量下载并续传
   python litscan.py --serve                  # 启动 FastAPI 服务
 """
 
+import os
 import argparse
 import logging
 import sys
@@ -50,7 +53,107 @@ def cmd_search(args, scanner: Scanner):
         scanner.config["query"]["sort_by"] = args.sort_by
 
     articles = scanner.run()
+
+    if args.download:
+        run_download(articles, args, scanner)
+
     return articles
+
+
+# ── 全文 PDF 下载 ──
+
+_DL_SYMBOL = {"downloaded": "✓", "skipped": "⊘", "failed": "✗", "unsupported": "—"}
+
+
+def _download_settings(args, scanner=None):
+    """合并 CLI 参数与 config.yaml 的 download 段"""
+    from core.fulltext import MIN_BYTES, DEFAULT_DELAY, DEFAULT_LIMIT
+
+    cfg = (scanner.config.get("download", {}) if scanner else {}) or {}
+    out_cfg = (scanner.config.get("output", {}) if scanner else {}) or {}
+    req_cfg = (scanner.config.get("request", {}) if scanner else {}) or {}
+    proxy = "none" if getattr(args, "no_proxy", False) else (args.proxy or req_cfg.get("proxy"))
+    return {
+        "pdf_dir": args.pdf_dir or cfg.get("dir") or os.path.join(out_cfg.get("dir", "./out"), "pdf"),
+        "limit": args.download_limit or cfg.get("limit") or DEFAULT_LIMIT,
+        "delay": cfg.get("delay", DEFAULT_DELAY),
+        "min_bytes": cfg.get("min_bytes", MIN_BYTES),
+        "proxy": proxy,
+    }
+
+
+def _cli_download_progress(idx, total, res):
+    sym = _DL_SYMBOL.get(res["status"], "?")
+    name = res.get("identifier") or (res.get("title") or "")[:40]
+    if res["status"] == "downloaded":
+        extra = f"{res['size'] / 1024:.0f}KB"
+        if res.get("via") in ("unpaywall", "openalex"):
+            extra += f" (via {res['via']})"
+    elif res["status"] in ("failed", "unsupported"):
+        extra = res.get("reason", "")[:60]
+    else:
+        extra = "本地已存在"
+    print(f"  [{idx}/{total}] {sym} {res['source']}:{name}  {extra}")
+
+
+def print_download_summary(summary: dict):
+    print(f"\n  {'-'*50}")
+    print(f"  下载完成: 成功 {summary['downloaded']} · 跳过 {summary['skipped']} · "
+          f"失败 {summary['failed']} · 不支持 {summary['unsupported']}")
+    print(f"  目录: {summary['dir']}")
+
+    unsupported = {}
+    for r in summary["results"]:
+        if r["status"] == "unsupported" and r.get("source"):
+            unsupported.setdefault(r["source"], r.get("reason", ""))
+    if unsupported:
+        print("  不可自动下载的源及原因:")
+        for src, reason in unsupported.items():
+            print(f"    · {src}: {reason}")
+    if summary["failed"]:
+        print("  失败项可重跑同一命令自动重试（已下好的会跳过）")
+    print(f"  {'-'*50}")
+
+
+def run_download(articles, args, scanner=None):
+    """对文章列表批量下载开放全文 PDF"""
+    from core.fulltext import download_articles
+
+    if not articles:
+        print("\n  没有可下载的结果（先完成一次检索）")
+        return
+    settings = _download_settings(args, scanner)
+    payload = [a.to_dict() if hasattr(a, "to_dict") else a for a in articles]
+    print(f"\n  PDF 下载 → {settings['pdf_dir']}（本次上限 {settings['limit']} 篇）")
+    summary = download_articles(
+        payload, settings["pdf_dir"], limit=settings["limit"],
+        proxy=settings["proxy"], delay=settings["delay"],
+        min_bytes=settings["min_bytes"], on_event=_cli_download_progress,
+    )
+    print_download_summary(summary)
+
+
+def cmd_download_csv(args):
+    """不检索，直接从 CSV 批量下载（断点续传）"""
+    from core.fulltext import load_articles_from_csv, download_articles
+
+    path = args.download_csv
+    if not os.path.exists(path):
+        print(f"  ✗ 文件不存在: {path}")
+        sys.exit(1)
+    articles = load_articles_from_csv(path)
+    if not articles:
+        print(f"  ✗ {path} 中没有可下载的条目")
+        return
+    settings = _download_settings(args)
+    print(f"\n  从 CSV 加载 {len(articles)} 条: {path}")
+    print(f"  PDF 下载 → {settings['pdf_dir']}（本次上限 {settings['limit']} 篇）")
+    summary = download_articles(
+        articles, settings["pdf_dir"], limit=settings["limit"],
+        proxy=settings["proxy"], delay=settings["delay"],
+        min_bytes=settings["min_bytes"], on_event=_cli_download_progress,
+    )
+    print_download_summary(summary)
 
 
 def cmd_history(args):
@@ -144,6 +247,13 @@ def main():
     parser.add_argument("--sort-by", choices=["relevance", "citations", "year"],
                         help="排序方式（默认按配置 relevance）")
 
+    # 全文 PDF 下载
+    parser.add_argument("--download", action="store_true", help="检索后批量下载开放全文 PDF")
+    parser.add_argument("--download-limit", type=int, help="单次最多下载篇数（默认取配置，兜底 20）")
+    parser.add_argument("--pdf-dir", help="PDF 存放目录（默认 out/pdf）")
+    parser.add_argument("--download-csv", metavar="CSV",
+                        help="不检索，直接从 CSV（如 out/articles.csv）批量下载并断点续传")
+
     # 历史 & 管理
     parser.add_argument("--history", action="store_true", help="查看搜索历史")
     parser.add_argument("--history-search", metavar="QUERY", help="搜索历史记录")
@@ -183,6 +293,11 @@ def main():
 
     if args.history_search:
         cmd_history_search(args)
+        return
+
+    # 从 CSV 批量下载（不需要 config.yaml，也不发起检索）
+    if args.download_csv:
+        cmd_download_csv(args)
         return
 
     # 启动 API 服务

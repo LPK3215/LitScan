@@ -362,6 +362,75 @@ finally:
     _ad._cache.clear()
 
 # ─────────────────────────────────────────────────────────────
+section("11. 全文下载 API (无网络)")
+# ─────────────────────────────────────────────────────────────
+
+r = client.get("/api/download/supported")
+test("下载支持表 200", r.status_code == 200)
+_src = {s["source"]: s for s in r.json().get("sources", [])}
+test("支持表含 arxiv 且可下载", _src.get("arxiv", {}).get("supported") is True)
+test("支持表含 crossref 且走 DOI 兜底", _src.get("crossref", {}).get("mode") == "oa_lookup")
+test("支持表含 openaire 且标注不可下载", _src.get("openaire", {}).get("supported") is False)
+test("不可下载源带原因说明", bool(_src.get("openaire", {}).get("note")))
+
+r = client.post("/api/download", json={"articles": []})
+test("空文章列表返回 422", r.status_code == 422)
+
+r = client.post("/api/download", json={"articles": [{"source": "openaire"}], "limit": 0})
+test("limit=0 返回 422", r.status_code == 422)
+
+# openaire 无 DOI 兜底，走 unsupported 分支，不发网络请求
+r = client.post("/api/download", json={
+    "articles": [{"title": "O", "source": "openaire"}], "limit": 5})
+test("openaire 下载请求 200", r.status_code == 200)
+_d = r.json()
+test("openaire 计入 unsupported", _d["unsupported"] == 1 and _d["downloaded"] == 0)
+test("openaire 结果带不可下载原因", bool(_d["results"][0].get("reason")))
+test("下载响应含目录字段", "dir" in _d)
+
+
+# ─────────────────────────────────────────────────────────────
+section("12. 前后端契约与页面静态校验")
+# ─────────────────────────────────────────────────────────────
+
+# 12.1 /api/sources 字段与前端渲染一致
+_s0 = client.get("/api/sources").json()["sources"][0]
+test("sources 项含 name/description", "name" in _s0 and "description" in _s0)
+
+# 12.2 /api/download/supported 字段与前端读取一致
+_sup0 = client.get("/api/download/supported").json()["sources"][0]
+test("supported 项含 source/supported/mode/note",
+     all(k in _sup0 for k in ("source", "supported", "mode", "note")))
+
+# 12.3 /api/download 汇总与单条结果字段与前端读取一致
+_dl = client.post("/api/download", json={"articles": [{"title": "O", "source": "openaire"}]}).json()
+test("download 汇总字段齐全",
+     all(k in _dl for k in ("total", "downloaded", "skipped", "failed", "unsupported", "dir", "results")))
+_r0 = _dl["results"][0]
+test("download 单条结果字段齐全",
+     all(k in _r0 for k in ("title", "source", "identifier", "status", "path", "size", "pdf_url", "via", "reason")))
+
+# 12.4 首页引用的所有接口路径都存在（防止前端调用后端没有的路由）
+_html = client.get("/").text
+for _token in ("/api/sources", "/api/search/stream", "/api/export",
+               "/api/article/detail", "/api/download", "/api/download/supported"):
+    test(f"首页引用接口 {_token}", _token in _html)
+
+# 12.5 首页关键元素/钩子齐全（按钮与 JS 选择器一致）
+for _token in ('id="btnDownloadSelected"', "data-download", "data-export", "data-preview",
+               'id="previewModal"', 'id="downloadModal"', 'id="actionBar"', 'id="toast"'):
+    test(f"首页包含 {_token}", _token in _html)
+
+# 12.6 首页不残留已废弃的下载交互写法
+test("首页已改为分批下载", "DOWNLOAD_CHUNK" in _html)
+test("首页含下载结果弹窗渲染逻辑", "openDownloadResult" in _html)
+
+# 12.7 导航页面全部可达
+for _page in ("/", "/history", "/sources", "/logs"):
+    test(f"页面可访问 {_page}", client.get(_page).status_code == 200)
+
+
+# ─────────────────────────────────────────────────────────────
 print(f"\n{'='*60}")
 print(f"  测试结果汇总")
 print(f"{'='*60}")

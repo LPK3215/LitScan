@@ -46,6 +46,8 @@ python litscan.py --history                # 查看搜索历史
 python litscan.py --history-search "LLM"   # 搜索历史记录
 python litscan.py --retry 20260909_123456  # 从历史记录重新检索
 python litscan.py --sources                # 列出检索源
+python litscan.py --download               # 检索后下载开放全文 PDF（默认 20 篇）
+python litscan.py --download-csv out/articles.csv  # 不检索，按 CSV 批量下载并断点续传
 python litscan.py --serve -p 9000          # 指定端口启动服务
 ```
 
@@ -65,6 +67,8 @@ API 接口:
 | POST | /api/search/{source} | 单库检索 |
 | GET | /api/articles | 最近一次结果 |
 | POST | /api/export | 多选导出 (markdown/bibtex/endnote/csv/text) |
+| GET | /api/download/supported | 各源全文 PDF 直下支持情况 |
+| POST | /api/download | 批量下载开放全文 PDF（断点续传） |
 | GET | /api/article/detail | 文章详情回源（站内快速预览） |
 | GET | /api/stats | 运行统计 |
 | GET | /api/history | 搜索历史 |
@@ -152,13 +156,59 @@ curl "http://127.0.0.1:8000/api/article/detail?source=arxiv&url=https://arxiv.or
 
 支持回源：arxiv / crossref / semanticscholar / openreview / europepmc / doaj；openaire 无单条接口，返回 501 并降级为原文链接。
 
+### 全文 PDF 下载
+
+检索结果中的**开放全文**可直接下载到 `out/pdf/`，不必再逐篇跳转官网。已下载且体积达标的文件自动跳过，中断后重跑即可续传。
+
+| 数据源 | 能否直下 | 通道 |
+|---|---|---|
+| arXiv | ✅ 稳定 | 由链接/DOI 推导 `https://arxiv.org/pdf/{id}`，免费无上限，最稳定 |
+| OpenReview | ✅ 稳定 | `https://openreview.net/pdf?id={note_id}`，开放评审均可下 |
+| Semantic Scholar | ⚠️ 视论文而定 | 查 API 的 `openAccessPdf`，有开放获取版本才给直链 |
+| Europe PMC | ⚠️ 视论文而定 | 仅开放获取 (OA) 子集可取到 PDF |
+| DOAJ | ⚠️ 视期刊而定 | 取决于期刊是否在书目记录中给出 PDF 链接 |
+| Crossref | ✅ 有条件 | 源本身只有元数据，转由 **Unpaywall / OpenAlex** 按 DOI 找合法 OA 版本 |
+| OpenAIRE | ❌ 放弃 | 聚合索引，未接入单条记录接口，定位不到 PDF 直链 |
+
+另有两条**通用正规通道**：任何带 DOI 的条目（不论来自哪个源）都会依次尝试
+**Unpaywall → OpenAlex**，命中即下载作者自存档 / 预印本等「已公开标注为开放获取」的版本。
+
+**为什么以前不能直接下载**：检索层只抓元数据（标题/作者/摘要/链接），从不请求全文；页面上只提供跳转官网的链接。
+
+**哪些能下、哪些不能**——只走正规接口，不做任何绕过：
+
+- ✅ 源自己提供的直链：arXiv / OpenReview
+- ✅ 第三方 OA 索引已公开标注的开放获取版本：Unpaywall / OpenAlex（对任何有 DOI 的条目生效）
+- ❌ 付费墙后**没有** OA 版本的（如 IEEE / Elsevier 订阅论文）：不下载、不绕过，回退到「原文」链接
+- ❌ 连程序化检索都不开放的平台（如中国知网 CNKI）：无从下载，直接放弃
+- 已登录用户的订阅权限属于账号行为，本工具**不使用、也不复用**任何登录会话
+
+> 兜底通道需要联系邮箱进入免费「礼貌池」，默认用 `request.user_agent` 里的地址，可用环境变量 `LITSCAN_CONTACT_EMAIL` 覆盖。
+
+下载有单次上限（`config.yaml` 的 `download.limit`，默认 20）与礼貌间隔（`download.delay`），避免触发对方限流；
+单篇有效性用 `%PDF` 魔数 + 最小体积（默认 20KB）校验，避免把错误页/空壳当成 PDF 落盘。
+Web 端多选下载按每 5 篇一批推进并实时显示 `n/N` 进度，完成后弹出结果明细（成功/跳过/失败/不支持、命中渠道与失败原因），全部文件落在 `out/pdf/`。
+
+```bash
+# CLI：检索后下载
+python litscan.py -k "LLM agent" --download --download-limit 10
+
+# CLI：从已有结果 CSV 下载（断点续传，可反复运行）
+python litscan.py --download-csv out/articles.csv
+
+# API
+curl -X POST http://127.0.0.1:8000/api/download \
+  -H "Content-Type: application/json" \
+  -d '{"articles":[{"source":"arxiv","url":"https://arxiv.org/abs/1706.03762"}],"limit":5}'
+```
+
 ## 架构
 
 ![LitScan 架构图](./docs/assets/architecture.svg)
 
 - **接入层**: CLI / Web UI / REST API + SSE 三种入口，共用同一套核心
 - **核心层**: Scanner 调度 → Fetcher（重试 ×4、限流退避、代理）→ 7 个数据源适配器 → 去重排序
-- **输出层**: 统一 CSV、检索日志、搜索历史、各库原始响应
+- **输出层**: 统一 CSV、检索日志、搜索历史、各库原始响应、开放全文 PDF
 - 生成脚本: [`docs/scripts/generate_architecture.py`](docs/scripts/generate_architecture.py)（改动后可重新生成）
 
 ## 技术栈
@@ -178,6 +228,7 @@ curl "http://127.0.0.1:8000/api/article/detail?source=arxiv&url=https://arxiv.or
 out/
 ├── raw/              # 各库原始响应
 ├── exports/          # 多选导出留档 (md/bib/ris/csv/txt)
+├── pdf/              # 开放全文 PDF（按编号命名，可断点续传）
 ├── articles.csv      # 统一格式文章列表
 ├── log.md            # 检索日志
 └── history.json      # 搜索历史
@@ -216,6 +267,7 @@ LitScan/
 │   ├── scanner.py       # 调度器
 │   ├── dedup.py         # 跨库去重 (DOI + 标题) 与排序
 │   ├── exporter.py      # Markdown/BibTeX/EndNote/CSV/文本 导出
+│   ├── fulltext.py      # 开放全文 PDF 下载（断点续传 + 有效性校验）
 │   ├── article_detail.py # 文章详情回源（站内预览）
 │   ├── history.py       # 搜索历史
 │   ├── logger.py        # 操作日志
@@ -253,7 +305,7 @@ python test_server_edge.py   # 服务端接口（仅验证逻辑）
 - 检索结果引用数排序 ✅（v1.1 已加）
 - 跨库去重 (DOI主键匹配) ✅（v1.1 已加）
 - 导出 BibTeX / EndNote ✅（v1.1 已加）
-- 全文 PDF 批量抓取
+- 全文 PDF 批量抓取 ✅（已加，见「全文 PDF 下载」）
 - 相似文献推荐
 
 ## 更新日志

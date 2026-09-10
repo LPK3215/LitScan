@@ -318,6 +318,217 @@ except ValueError:
 
 
 # ─────────────────────────────────────────────────────────────
+section("9. 全文下载 core/fulltext.py")
+# ─────────────────────────────────────────────────────────────
+
+from core.fulltext import (
+    extract_arxiv_id, extract_openreview_id, resolve_pdf_url,
+    download_article, download_articles, is_valid_pdf,
+    load_articles_from_csv, _safe_filename, _has_traversal,
+    SOURCE_SUPPORT, support_table, MIN_BYTES,
+)
+
+# 9.1 标识符解析
+test("arXiv abs 链接解析", extract_arxiv_id("https://arxiv.org/abs/1706.03762") == "1706.03762")
+test("arXiv pdf 链接解析", extract_arxiv_id("https://arxiv.org/pdf/2301.00001v2") == "2301.00001v2")
+test("arXiv DOI 解析", extract_arxiv_id(None, "10.48550/arXiv.2401.12345") == "2401.12345")
+test("arXiv 老式 ID", extract_arxiv_id("https://arxiv.org/abs/cs/0701001") == "cs/0701001")
+test("非 arXiv 返回 None", extract_arxiv_id("https://example.com/paper") is None)
+test("OpenReview ID 解析", extract_openreview_id("https://openreview.net/forum?id=abcDEF123") == "abcDEF123")
+test("OpenReview 无 id 返回 None", extract_openreview_id("https://openreview.net/forum") is None)
+
+# 9.2 PDF 有效性校验（PDF 魔数 + 最小体积）
+test("合法 PDF 通过", is_valid_pdf(b"%PDF-1.7" + b"0" * MIN_BYTES))
+test("非 PDF 头被拒", not is_valid_pdf(b"<html>" + b"0" * MIN_BYTES))
+test("体积不足被拒", not is_valid_pdf(b"%PDF-1.7" + b"0" * 10))
+test("空内容被拒", not is_valid_pdf(b""))
+
+# 9.3 直链解析（不联网）
+import core.fulltext as _ft
+
+_orig_ft_fetch = _ft.fetch
+
+
+class _Resp:
+    def __init__(self, payload):
+        self._payload = payload
+
+    def json(self):
+        return self._payload
+
+
+test("arXiv 直链", resolve_pdf_url("arxiv", url="https://arxiv.org/abs/1706.03762")["pdf_url"]
+     == "https://arxiv.org/pdf/1706.03762")
+test("OpenReview 直链", resolve_pdf_url("openreview", url="https://openreview.net/forum?id=X1")["pdf_url"]
+     == "https://openreview.net/pdf?id=X1")
+test("无 DOI 的 crossref 无法解析并给原因",
+     resolve_pdf_url("crossref", url="https://doi.org/10.1/x")["ok"] is False
+     and bool(resolve_pdf_url("crossref", url="https://doi.org/10.1/x")["reason"]))
+test("未知源解析失败", resolve_pdf_url("nope", url="http://x")["ok"] is False)
+test("支持表覆盖全部源", len(support_table()) == len(SOURCE_SUPPORT) and len(SOURCE_SUPPORT) >= 7)
+test("路径穿越被识别", _has_traversal("../../etc/passwd"))
+test("文件名清洗去非法字符", "/" not in _safe_filename('a/b:c*d?.pdf'))
+
+# 9.3b DOI 兜底：Unpaywall → OpenAlex（模拟响应，不联网）
+_ft.fetch = lambda url, *a, **k: _Resp(
+    {"best_oa_location": {"url_for_pdf": "https://repo.example/a.pdf"}} if "unpaywall" in url else {})
+try:
+    _got = resolve_pdf_url("crossref", doi="10.1234/abc")
+    test("crossref 经 Unpaywall 找到合法 OA 直链",
+         _got["ok"] and _got["via"] == "unpaywall"
+         and _got["pdf_url"] == "https://repo.example/a.pdf")
+finally:
+    _ft.fetch = _orig_ft_fetch
+
+_ft.fetch = lambda url, *a, **k: _Resp(
+    {"best_oa_location": {"url_for_pdf": None}} if "unpaywall" in url
+    else {"best_oa_location": {"pdf_url": "https://oa.example/b.pdf"}})
+try:
+    _got2 = resolve_pdf_url("crossref", doi="10.1234/def")
+    test("Unpaywall 无果时回落 OpenAlex",
+         _got2["ok"] and _got2["via"] == "openalex" and _got2["pdf_url"].endswith("b.pdf"))
+finally:
+    _ft.fetch = _orig_ft_fetch
+
+_ft.fetch = lambda *a, **k: _Resp({"best_oa_location": {}})
+try:
+    _got3 = resolve_pdf_url("crossref", doi="10.1234/ghi")
+    test("无合法 OA 版本时明确返回失败",
+         _got3["ok"] is False and "OpenAlex" in _got3["reason"])
+finally:
+    _ft.fetch = _orig_ft_fetch
+
+# 9.4 下载流程（用假的 fetch 模拟，不联网）
+_fake_pdf = b"%PDF-1.4\n" + b"x" * (MIN_BYTES + 100)
+
+
+class _FakePdfResp:
+    content = _fake_pdf
+
+
+class _FakeHtmlResp:
+    content = b"<html>blocked</html>"
+
+
+tmpdir = tempfile.mkdtemp()
+try:
+    _ft.fetch = lambda *a, **k: _FakePdfResp()
+    art = {"title": "T", "source": "arxiv", "url": "https://arxiv.org/abs/1706.03762"}
+    r1 = download_article(art, tmpdir)
+    test("下载成功且文件落盘", r1["status"] == "downloaded" and os.path.exists(r1["path"]))
+    test("下载体积记录正确", r1["size"] == len(_fake_pdf))
+    r2 = download_article(art, tmpdir)
+    test("已存在则跳过（断点续传）", r2["status"] == "skipped")
+
+    _ft.fetch = lambda *a, **k: _FakeHtmlResp()
+    r3 = download_article({"title": "T2", "source": "arxiv",
+                           "url": "https://arxiv.org/abs/2301.00001"}, tmpdir, attempts=1)
+    test("非 PDF 响应判失败", r3["status"] == "failed"
+         and not os.path.exists(os.path.join(tmpdir, "2301.00001.pdf")))
+
+    _ft.fetch = _orig_ft_fetch
+    r4 = download_article({"title": "O", "source": "openaire"}, tmpdir)
+    test("不可下载源标 unsupported 并带原因", r4["status"] == "unsupported" and bool(r4["reason"]))
+
+    _ft.fetch = lambda *a, **k: _FakePdfResp()
+    batch = [
+        {"title": "A", "source": "arxiv", "url": "https://arxiv.org/abs/1111.11111"},
+        {"title": "B", "source": "openaire"},
+        {"title": "C", "source": "arxiv", "url": "https://arxiv.org/abs/2222.22222"},
+    ]
+    summ = download_articles(batch, tmpdir, limit=2, delay=0)
+    test("批量 limit 生效", summ["total"] == 2)
+    test("批量汇总计数", summ["downloaded"] == 1 and summ["unsupported"] == 1)
+    test("汇总含绝对目录", os.path.isdir(summ["dir"]))
+finally:
+    _ft.fetch = _orig_ft_fetch
+    shutil.rmtree(tmpdir, ignore_errors=True)
+
+# 9.5 CSV 读取（对齐参考脚本的「CSV → 断点续传」用法）
+tmpdir = tempfile.mkdtemp()
+try:
+    csv_path = save_csv([Article(title="Paper", source="arxiv",
+                                 url="https://arxiv.org/abs/1706.03762")], tmpdir, "articles.csv")
+    rows = load_articles_from_csv(csv_path)
+    test("CSV 读取条目", len(rows) == 1 and rows[0]["source"] == "arxiv")
+    test("CSV 空值转 None", rows[0]["doi"] is None)
+finally:
+    shutil.rmtree(tmpdir, ignore_errors=True)
+
+
+# ─────────────────────────────────────────────────────────────
+section("10. 数据保存与持久化")
+# ─────────────────────────────────────────────────────────────
+
+# 10.1 搜索历史落盘 + 重载
+tmpdir = tempfile.mkdtemp()
+try:
+    from core.history import SearchHistory
+    hp = os.path.join(tmpdir, "history.json")
+    h1 = SearchHistory(history_file=hp)
+    rec = h1.add("persist test", ["arxiv"], 2020, 5, 3, {"arxiv": 3})
+    test("历史文件落盘", os.path.exists(hp))
+    h2 = SearchHistory(history_file=hp)
+    test("历史重载条数一致", len(h2) == 1)
+    test("历史字段完整可读", h2.get(rec.id).keywords == "persist test")
+finally:
+    shutil.rmtree(tmpdir, ignore_errors=True)
+
+# 10.2 操作日志落盘 + 重载
+tmpdir = tempfile.mkdtemp()
+try:
+    from core.logger import OperationLogger
+    lp = os.path.join(tmpdir, "operations.json")
+    lg1 = OperationLogger(log_file=lp)
+    lg1.success("hello", source="test", details={"n": 1})
+    test("操作日志落盘", os.path.exists(lp))
+    lg2 = OperationLogger(log_file=lp)
+    test("操作日志重载条数一致", len(lg2) == 1)
+    test("操作日志字段完整", lg2.list()[0].message == "hello")
+finally:
+    shutil.rmtree(tmpdir, ignore_errors=True)
+
+# 10.3 CSV 写出 → 读回（标题/来源保持）
+tmpdir = tempfile.mkdtemp()
+try:
+    p = save_csv([Article(title="持久化标题", source="arxiv",
+                          url="https://arxiv.org/abs/1706.03762")], tmpdir)
+    test("CSV 落盘", os.path.exists(p))
+    back = load_articles_from_csv(p)
+    test("CSV 读回标题一致", back and back[0]["title"] == "持久化标题")
+    test("CSV 读回来源一致", back and back[0]["source"] == "arxiv")
+finally:
+    shutil.rmtree(tmpdir, ignore_errors=True)
+
+# 10.4 导出留档
+tmpdir = tempfile.mkdtemp()
+try:
+    content = build_export("bibtex", SAMPLE)
+    p = save_export(content, "bibtex", tmpdir, "持久化 测试")
+    test("导出留档存在且扩展名正确", os.path.exists(p) and p.endswith(".bib"))
+    test("留档内容与生成一致", os.path.getsize(p) == len(content))
+finally:
+    shutil.rmtree(tmpdir, ignore_errors=True)
+
+# 10.5 PDF 落盘 + 断点续传 + 无 .part 残留
+tmpdir = tempfile.mkdtemp()
+try:
+    _ft.fetch = lambda *a, **k: _FakePdfResp()
+    _art = {"title": "P", "source": "arxiv", "url": "https://arxiv.org/abs/9999.99999"}
+    _r1 = download_article(_art, tmpdir)
+    test("PDF 文件落盘", _r1["status"] == "downloaded" and os.path.exists(_r1["path"]))
+    if _r1["path"] and os.path.exists(_r1["path"]):
+        with open(_r1["path"], "rb") as _f:
+            test("落盘内容为有效 PDF", _f.read(4) == b"%PDF")
+    _r2 = download_article(_art, tmpdir)
+    test("再次下载命中续传跳过", _r2["status"] == "skipped")
+    test("无 .part 残留文件", not [f for f in os.listdir(tmpdir) if f.endswith(".part")])
+finally:
+    _ft.fetch = _orig_ft_fetch
+    shutil.rmtree(tmpdir, ignore_errors=True)
+
+
+# ─────────────────────────────────────────────────────────────
 print(f"\n{'='*60}")
 print(f"  测试结果汇总")
 print(f"{'='*60}")

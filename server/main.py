@@ -14,6 +14,8 @@ API 接口 (前缀 /api/):
   POST /api/search/{source}     单库检索
   GET  /api/articles            最近一次检索结果
   POST /api/export              多选导出 (markdown/bibtex/csv/text)
+  GET  /api/download/supported  各源全文 PDF 直下支持情况
+  POST /api/download            批量下载开放全文 PDF (断点续传)
   GET  /api/article/detail      文章详情回源 (站内快速预览)
   GET  /api/history             搜索历史
   GET  /api/history/{record_id} 历史记录详情
@@ -50,6 +52,7 @@ from core.logger import OperationLogger, LogLevel
 from core.exporter import build_export, save_export, FORMAT_META
 from core.dedup import deduplicate, sort_articles
 from core.article_detail import get_detail, DetailNotSupported, DetailNotFound
+from core.fulltext import download_articles, support_table
 
 logger = logging.getLogger("litscan.server")
 
@@ -110,6 +113,13 @@ class ExportRequest(BaseModel):
     articles: list[dict] = Field(..., min_length=1, description="选中的文章列表")
     keywords: str = Field("", description="关联关键词（写入文件名与文档头）")
     save: bool = Field(True, description="是否在 out/exports/ 留档")
+
+
+class DownloadRequest(BaseModel):
+    """批量下载开放全文 PDF 请求"""
+    articles: list[dict] = Field(..., min_length=1, description="待下载的文章列表")
+    limit: int = Field(20, ge=1, le=200, description="单次最多下载篇数")
+    proxy: Optional[str] = Field(None, description="代理地址（同检索）")
 
 
 # ── 前端页面 ──
@@ -512,6 +522,40 @@ async def export_articles(request: ExportRequest):
     headers["Content-Disposition"] = f"attachment; filename=\"{ascii_name}\"; filename*=UTF-8''{quote(filename)}"
 
     return Response(content=content, media_type=meta["mime"], headers=headers)
+
+
+# ── 全文 PDF 下载 ──
+
+@app.get("/api/download/supported")
+async def download_supported():
+    """各源全文 PDF 直下支持情况（含不可下载的原因）"""
+    return {"sources": support_table()}
+
+
+@app.post("/api/download")
+def download_pdfs(request: DownloadRequest):
+    """
+    批量下载开放全文 PDF 到 out/pdf/，已存在且体积达标的文件自动跳过（断点续传）。
+    支持: arxiv / openreview / semanticscholar / europepmc / doaj；
+    不支持: crossref / openaire（原因见返回结果的 reason 与 /api/download/supported）。
+    """
+    pdf_dir = os.path.join(BASE_DIR, "out", "pdf")
+    try:
+        summary = download_articles(
+            request.articles, pdf_dir, limit=request.limit, proxy=request.proxy,
+        )
+    except OSError as e:
+        raise HTTPException(status_code=500, detail=f"写入 PDF 失败: {e}")
+
+    op_logger.info(
+        f"PDF 下载 {summary['total']} 篇: 成功 {summary['downloaded']} / 跳过 {summary['skipped']} / "
+        f"失败 {summary['failed']} / 不支持 {summary['unsupported']}",
+        source="download",
+        details={"dir": summary["dir"], "downloaded": summary["downloaded"],
+                 "skipped": summary["skipped"], "failed": summary["failed"],
+                 "unsupported": summary["unsupported"]},
+    )
+    return summary
 
 
 # ── 文章详情（站内快速预览） ──

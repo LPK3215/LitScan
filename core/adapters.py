@@ -62,12 +62,14 @@ def semanticscholar_adapter(keywords: str, limit: int = 30, year_from: Optional[
         ext_ids = item.get("externalIds", {}) or {}
         authors_list = item.get("authors", []) or []
         authors = "; ".join(a.get("name", "") for a in authors_list if a.get("name")) or None
+        paper_id = item.get("paperId")
         articles.append(Article(
             title=item.get("title", ""),
             source="semanticscholar",
             year=item.get("year"),
             venue=item.get("venue"),
             doi=ext_ids.get("DOI"),
+            url=f"https://www.semanticscholar.org/paper/{paper_id}" if paper_id else None,
             citation_count=item.get("citationCount"),
             abstract=(item.get("abstract") or "")[:500],
             authors=authors,
@@ -91,9 +93,11 @@ def crossref_adapter(keywords: str, limit: int = 30, year_from: Optional[int] = 
         authors_list = item.get("author", []) or []
         authors = "; ".join(f"{a.get('given', '')} {a.get('family', '')}".strip() for a in authors_list if a.get("family")) or None
         title = " ".join(item.get("title", [])) if isinstance(item.get("title"), list) else (item.get("title") or "")
+        doi = item.get("DOI")
         articles.append(Article(
             title=title, source="crossref", year=year, venue=venue,
-            doi=item.get("DOI"), citation_count=item.get("is-referenced-by-count"),
+            doi=doi, url=item.get("URL") or (f"https://doi.org/{doi}" if doi else None),
+            citation_count=item.get("is-referenced-by-count"),
             authors=authors,
         ))
     logger.info(f"crossref: {len(articles)} 篇")
@@ -106,13 +110,18 @@ def openreview_adapter(keywords: str, limit: int = 30, **kwargs) -> list[Article
     articles = []
     for note in resp.json().get("notes", []):
         c = note.get("content", {}) or {}
+        note_id = note.get("id")
         t = c.get("title", {}) or {}
         title = t.get("value", "") if isinstance(t, dict) else ""
         v = c.get("venue", {}) or {}
         venue = v.get("value", "") if isinstance(v, dict) else ""
         year = c.get("year", {}).get("value") if isinstance(c.get("year"), dict) else None
         abstract = c.get("abstract", {}).get("value", "")[:500] if isinstance(c.get("abstract"), dict) else ""
-        articles.append(Article(title=title, source="openreview", year=year, venue=venue, abstract=abstract))
+        doi = c.get("doi", {}).get("value") if isinstance(c.get("doi"), dict) else None
+        articles.append(Article(
+            title=title, source="openreview", year=year, venue=venue, abstract=abstract, doi=doi,
+            url=f"https://openreview.net/forum?id={note_id}" if note_id else None,
+        ))
     logger.info(f"openreview: {len(articles)} 篇")
     return articles
 
@@ -151,10 +160,13 @@ def doaj_adapter(keywords: str, limit: int = 30, **kwargs) -> list[Article]:
         year = bib.get("year")
         journal = bib.get("journal", {}) or {}
         venue = journal.get("title") if isinstance(journal, dict) else None
+        doi = next((it.get("id") for it in (bib.get("identifier") or [])
+                    if isinstance(it, dict) and str(it.get("type", "")).lower() == "doi" and it.get("id")), None)
+        links = [l for l in (bib.get("link") or []) if isinstance(l, dict) and l.get("url")]
         articles.append(Article(
             title=bib.get("title", ""), source="doaj",
             year=int(year) if year and str(year).isdigit() else None,
-            venue=venue,
+            venue=venue, doi=doi, url=links[0]["url"] if links else None,
         ))
     logger.info(f"doaj: {len(articles)} 篇")
     return articles
@@ -172,6 +184,7 @@ def europepmc_adapter(keywords: str, limit: int = 30, **kwargs) -> list[Article]
             year=int(r["pubYear"]) if r.get("pubYear") and r["pubYear"].isdigit() else None,
             venue=journal.get("title"),
             doi=r.get("doi"),
+            url=f"https://europepmc.org/article/{r.get('source', 'MED')}/{r.get('id', '')}" if r.get("id") else None,
         ))
     logger.info(f"europepmc: {len(articles)} 篇")
     return articles

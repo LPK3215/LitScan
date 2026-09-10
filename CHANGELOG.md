@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Full-text PDF download (`core/fulltext.py`): `POST /api/download` and CLI `--download` / `--download-csv` write open-access PDFs to `out/pdf/`
+- Download robustness: resume (skip files ≥ `min_bytes`, default 20KB), `%PDF` magic-number validation, per-run batch limit and polite delay; reuses `core/fetcher` retry/proxy/rate-limit handling
+- PDF source registry: `arxiv` / `openreview` (direct link), `semanticscholar` / `europepmc` / `doaj` (conditional on open access)
+- Universal DOI fallback: any article with a DOI is looked up via **Unpaywall → OpenAlex** for a legally open-access version, so `crossref` (metadata only) can still download when an OA copy exists; `openaire` returns an explicit reason
+- Adapters enriched with `doi` / `url` (`openreview`, `doaj`, `semanticscholar`, `crossref`, `europepmc`) so results carry the identifiers needed for resolution (also restores the missing "原文" links)
+- `GET /api/download/supported` exposes per-source download capability (with `mode`: direct / api / oa_lookup / none)
+- Web UI: per-result `⬇ PDF` button and a `📄 下载 PDF` action-bar button for selected results
+
+### Changed
+- PDF download UX: multi-select downloads are chunked in the browser with live `n/N` progress, and results open a detail modal showing each item's status, size, channel (`via`), save directory and failure reason
+- Test suites expanded: frontend↔backend field contract + static template checks, data persistence (history / operation log / CSV / export archive / PDF resume), and a real-server HTTP smoke pass
+
 ## [1.1.0] - 2026-09-09
 
 ### Added

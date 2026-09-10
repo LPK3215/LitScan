@@ -45,3 +45,10 @@ history:
   enabled: true
   file: "./out/history.json"
   max_records: 200  # 最多保留条数
+
+# ── 全文 PDF 下载 ──
+download:
+  dir: "./out/pdf"     # PDF 存放目录（已存在且体积达标的文件自动跳过，可断点续传）
+  limit: 20            # 单次最多下载篇数，避免一次打爆网络/触发限流
+  delay: 1.5           # 相邻下载之间的礼貌间隔（秒）
+  min_bytes: 20480     # 小于 20KB 视为失败残留，重下

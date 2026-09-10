@@ -354,6 +354,9 @@ h1::after {
     transition: color 0.15s;
 }
 .btn-link:hover { color: var(--accent-dark); text-decoration: underline; }
+.btn-link.downloaded { color: var(--ok); font-weight: 600; }
+
+#btnDownloadSelected { font-weight: 600; }
 
 .article-abstract {
     font-size: 0.85rem;
@@ -685,6 +688,26 @@ h1::after {
 .preview-error { color: var(--err); }
 .preview-fallback { color: var(--text-soft); word-break: break-all; }
 .preview-fallback a { color: var(--accent); }
+
+/* 下载结果弹窗 */
+.dl-summary { font-weight: 600; color: var(--accent-dark); margin-bottom: 0.2rem; }
+.dl-dir { font-size: 0.8rem; color: var(--muted); word-break: break-all; margin-bottom: 0.8rem; }
+.dl-list { display: flex; flex-direction: column; }
+.dl-row {
+    display: flex;
+    gap: 0.6rem;
+    padding: 0.45rem 0;
+    border-bottom: 1px dashed var(--border);
+    font-size: 0.88rem;
+}
+.dl-row:last-child { border-bottom: none; }
+.dl-icon { width: 1.1rem; flex-shrink: 0; text-align: center; font-weight: 700; }
+.dl-ok .dl-icon { color: var(--ok); }
+.dl-warn .dl-icon { color: var(--warn); }
+.dl-muted .dl-icon { color: var(--muted); }
+.dl-main { display: flex; flex-direction: column; gap: 0.1rem; min-width: 0; }
+.dl-title { color: var(--text); line-height: 1.45; }
+.dl-meta { color: var(--text-soft); font-size: 0.8rem; word-break: break-word; }
 
 /* 轻提示 */
 .toast {

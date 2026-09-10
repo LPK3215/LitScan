@@ -30,6 +30,37 @@ Clash 等代理开启 SSL 拦截但证书不被系统信任导致。
 
 生物医学方向倾向明显，默认关闭。需要时在 `config.yaml` 中改为 `enabled: true`。
 
+## 全文下载
+
+### Q: 为什么有些文献能直接下载 PDF、有些不能？
+
+只走正规接口，能下的都下，不能下的明确放弃：
+
+- **稳定可下**：arXiv、OpenReview（源自身提供 PDF 直链）
+- **视情况可下**：Semantic Scholar / Europe PMC / DOAJ（取决于论文或期刊是否开放获取）
+- **DOI 兜底**：任何带 DOI 的条目（包括 Crossref）都会依次尝试 **Unpaywall → OpenAlex**，
+  命中作者自存档 / 预印本等「已公开标注为开放获取」的版本即可下载
+- **不能下**：付费墙后没有 OA 版本的（IEEE / Elsevier 订阅论文等）——不下载、不绕过，回退到「原文」链接；
+  以及连程序化检索都不开放的平台（如中国知网 CNKI），无从下载
+
+已登录用户的订阅权限属于账号行为，本工具**不使用、也不复用**任何登录会话。
+各源的具体原因可在页面上点「⬇ PDF」查看，或访问 `GET /api/download/supported`。
+
+> 兜底通道（Unpaywall / OpenAlex）需要联系邮箱进入免费礼貌池，默认沿用 `request.user_agent` 里的地址，
+> 可用环境变量 `LITSCAN_CONTACT_EMAIL` 覆盖。
+
+### Q: 下载的 PDF 存在哪？能断点续传吗？
+
+默认存在 `out/pdf/`（可用 `--pdf-dir` 或 `config.yaml` 的 `download.dir` 修改）。
+已下载且体积 ≥ `download.min_bytes`（默认 20KB）的文件会自动跳过，因此中断后重跑同一命令即可续传：
+
+```bash
+python litscan.py --download                      # 检索后下载
+python litscan.py --download-csv out/articles.csv # 从已有结果下载（可反复运行）
+```
+
+单次最多下载 `download.limit`（默认 20）篇，相邻下载间有 `download.delay`（默认 1.5s）礼貌间隔，可自行调整。
+
 ## 使用
 
 ### Q: 历史记录能重跑吗？
